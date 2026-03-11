@@ -168,14 +168,13 @@
     border: 1px solid var(--border);
   }
   .btn-ghost:hover { color: var(--danger); border-color: var(--danger); }
-
   .btn-success {
     background: var(--success);
     color: #0d0f12;
   }
   .btn-success:hover { filter: brightness(1.1); transform: translateY(-1px); box-shadow: 0 6px 24px rgba(34,211,165,0.3); }
 
-
+  .stats-bar {
     display: flex; align-items: center; gap: 24px;
     font-size: 0.82rem; color: var(--muted);
   }
@@ -187,39 +186,109 @@
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 16px 20px;
+    padding: 18px 22px;
     margin-top: 16px;
-    display: flex; align-items: center; gap: 18px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    flex-wrap: wrap;
   }
-  .quality-global label {
-    font-size: 0.8rem; font-weight: 600; color: var(--muted);
-    white-space: nowrap; font-family: 'Syne', sans-serif;
+  .quality-global-left {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 120px;
   }
-  .quality-global input[type=range] {
+  .quality-global-left label {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--muted);
+    font-family: 'Syne', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .quality-global-left .quality-desc {
+    font-size: 0.75rem;
+    color: var(--muted);
+    opacity: 0.7;
+  }
+
+  .quality-slider-wrap {
     flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 200px;
+  }
+
+  .quality-global input[type=range] {
+    width: 100%;
     -webkit-appearance: none;
-    height: 4px;
-    background: var(--border);
+    height: 6px;
     border-radius: 99px;
     outline: none;
     cursor: pointer;
+    background: linear-gradient(
+      to right,
+      var(--success) 0%,
+      var(--accent) 50%,
+      var(--danger) 100%
+    );
   }
   .quality-global input[type=range]::-webkit-slider-thumb {
     -webkit-appearance: none;
-    width: 18px; height: 18px;
-    background: var(--accent);
+    width: 20px; height: 20px;
+    background: var(--text);
     border-radius: 50%;
     border: 3px solid var(--bg);
     cursor: pointer;
-    box-shadow: 0 0 0 1px var(--accent);
+    box-shadow: 0 0 0 2px var(--accent), 0 2px 8px rgba(0,0,0,0.4);
+    transition: box-shadow .15s;
+  }
+  .quality-global input[type=range]::-webkit-slider-thumb:hover {
+    box-shadow: 0 0 0 3px var(--accent), 0 2px 12px rgba(249,115,22,0.4);
+  }
+  .quality-global input[type=range]::-moz-range-thumb {
+    width: 20px; height: 20px;
+    background: var(--text);
+    border-radius: 50%;
+    border: 3px solid var(--bg);
+    cursor: pointer;
+    box-shadow: 0 0 0 2px var(--accent);
+  }
+
+  .quality-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.7rem;
+    color: var(--muted);
+    font-family: 'Syne', sans-serif;
+    font-weight: 600;
+  }
+  .quality-labels span:first-child { color: var(--success); }
+  .quality-labels span:last-child  { color: var(--danger); }
+
+  .quality-value-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    min-width: 64px;
   }
   .quality-value {
     font-family: 'Syne', sans-serif;
     font-weight: 800;
-    font-size: 1.1rem;
+    font-size: 1.5rem;
     color: var(--accent);
-    min-width: 36px;
-    text-align: right;
+    line-height: 1;
+    transition: color .2s;
+  }
+  .quality-value-unit {
+    font-size: 0.7rem;
+    color: var(--muted);
+    font-family: 'Syne', sans-serif;
+    font-weight: 600;
+    text-transform: uppercase;
   }
 
   /* GRID */
@@ -239,7 +308,6 @@
     position: relative;
   }
   .img-card:hover { border-color: rgba(249,115,22,0.4); transform: translateY(-2px); }
-  .img-card.expanded { grid-column: span 2; }
 
   .img-thumb {
     width: 100%; aspect-ratio: 4/3;
@@ -308,42 +376,6 @@
     border-radius: 0 2px 2px 0;
   }
 
-  /* Per-image quality panel */
-  .img-quality-panel {
-    padding: 10px 14px;
-    border-top: 1px solid var(--border);
-    display: none;
-  }
-  .img-quality-panel.open { display: block; }
-  .img-quality-panel label {
-    font-size: 0.72rem;
-    color: var(--muted);
-    display: flex; justify-content: space-between;
-    margin-bottom: 6px;
-    font-family: 'Syne', sans-serif; font-weight: 600;
-  }
-  .img-quality-panel input[type=range] {
-    width: 100%;
-    -webkit-appearance: none;
-    height: 3px;
-    background: var(--border);
-    border-radius: 99px;
-    outline: none;
-    cursor: pointer;
-  }
-  .img-quality-panel input[type=range]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 14px; height: 14px;
-    background: var(--accent);
-    border-radius: 50%;
-    border: 2px solid var(--bg);
-    cursor: pointer;
-  }
-  .panel-actions {
-    display: flex; gap: 6px; margin-top: 9px;
-  }
-  .panel-actions .btn { padding: 6px 14px; font-size: 0.75rem; }
-
   /* Processing spinner */
   @keyframes spin { to { transform: rotate(360deg); } }
   .spinner {
@@ -353,40 +385,6 @@
     border-radius: 50%;
     animation: spin .6s linear infinite;
   }
-
-  /* EMPTY STATE */
-  .empty-state {
-    display: none;
-    text-align: center;
-    padding: 40px;
-    color: var(--muted);
-    font-size: 0.88rem;
-  }
-
-  /* SAVE ALL */
-  .save-all-bar {
-    display: none;
-    position: fixed;
-    bottom: 24px; left: 50%; transform: translateX(-50%);
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 99px;
-    padding: 12px 24px;
-    display: flex; align-items: center; gap: 16px;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
-    z-index: 200;
-    backdrop-filter: blur(12px);
-    opacity: 0;
-    transition: opacity .3s, bottom .3s;
-    pointer-events: none;
-  }
-  .save-all-bar.visible {
-    opacity: 1;
-    pointer-events: all;
-    bottom: 32px;
-  }
-  .save-all-label { font-size: 0.85rem; color: var(--muted); }
-  .save-all-label strong { color: var(--text); }
 
   /* ARTICLE */
   article {
@@ -408,25 +406,6 @@
   }
   article p { color: var(--muted); line-height: 1.7; font-size: 0.92rem; margin-bottom: 14px; }
   article strong { color: var(--text); }
-
-  .table-wrap { overflow-x: auto; margin: 20px 0; }
-  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-  th {
-    background: var(--surface);
-    padding: 10px 16px;
-    text-align: left;
-    font-family: 'Syne', sans-serif;
-    font-weight: 700;
-    font-size: 0.78rem;
-    color: var(--muted);
-    border-bottom: 1px solid var(--border);
-  }
-  td {
-    padding: 10px 16px;
-    border-bottom: 1px solid rgba(42,48,64,0.5);
-    color: var(--muted);
-  }
-  td:first-child { color: var(--text); font-weight: 500; }
 
   /* PRIVACY BADGES */
   .privacy-grid {
@@ -460,7 +439,7 @@
     nav { padding: 14px 16px; }
     main { padding: 28px 16px 60px; }
     .images-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
-    .img-card.expanded { grid-column: span 1; }
+    .quality-global { gap: 12px; }
   }
 </style>
 </head>
@@ -489,6 +468,25 @@
     <button class="btn btn-primary" id="selectBtn">VYBRAT SOUBORY</button>
   </div>
 
+  <!-- GLOBAL QUALITY SLIDER -->
+  <div class="quality-global" id="qualityPanel">
+    <div class="quality-global-left">
+      <label for="qualitySlider">Míra komprese</label>
+      <span class="quality-desc">0 % = nejlepší kvalita</span>
+    </div>
+    <div class="quality-slider-wrap">
+      <input type="range" id="qualitySlider" min="0" max="100" value="25">
+      <div class="quality-labels">
+        <span>0 % – nejlepší kvalita</span>
+        <span>100 % – nejvyšší komprese</span>
+      </div>
+    </div>
+    <div class="quality-value-wrap">
+      <span class="quality-value" id="qualityDisplay">25</span>
+      <span class="quality-value-unit">komprese</span>
+    </div>
+  </div>
+
   <div id="wasmStatus" style="text-align:center;margin-top:10px;font-size:0.78rem;color:var(--muted);transition:opacity 1s;">
     ⏳ Načítám MozJPEG WebAssembly...
   </div>
@@ -507,7 +505,6 @@
   </div>
 
   <div class="images-grid" id="imagesGrid"></div>
-  <div class="empty-state" id="emptyState">Žádné soubory. Přidej obrázky výše.</div>
 </main>
 
 <main>
@@ -544,17 +541,46 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script type="module">
-const QUALITY   = 75;
 const MAX_FILES = 100;
 
+// Slider: 0 = nejlepší kvalita (JPEG quality 100), 100 = nejvyšší komprese (JPEG quality 1)
+// Převod: jpegQuality = 100 - sliderValue   (min 1, aby JPEG byl validní)
+const qualitySlider  = document.getElementById('qualitySlider');
+const qualityDisplay = document.getElementById('qualityDisplay');
+
+function getJpegQuality() {
+  return Math.max(1, 100 - parseInt(qualitySlider.value));
+}
+
+function updateQualityDisplay() {
+  const val = parseInt(qualitySlider.value);
+  qualityDisplay.textContent = val;
+
+  // Barva hodnoty podle intenzity komprese
+  if (val <= 30)       qualityDisplay.style.color = 'var(--success)';
+  else if (val <= 65)  qualityDisplay.style.color = 'var(--accent)';
+  else                 qualityDisplay.style.color = 'var(--danger)';
+
+  // Dynamický gradient na slideru
+  const pct = val;
+  qualitySlider.style.background = `linear-gradient(
+    to right,
+    var(--success) 0%,
+    var(--accent) 50%,
+    var(--danger) 100%
+  )`;
+}
+
+qualitySlider.addEventListener('input', updateQualityDisplay);
+updateQualityDisplay();
+
+// ── WASM ────────────────────────────────────────────────────
 const wasmStatus = document.getElementById('wasmStatus');
 let mozjpegEncode = null;
 
 (async () => {
   try {
-    // unpkg + ?module = WASM se načte automaticky, bez ručního init
     const { encode } = await import('https://unpkg.com/@jsquash/jpeg@1.4.0?module');
-    // Ověřovací encode 1×1 px
     await encode(new ImageData(new Uint8ClampedArray(4), 1, 1), { quality: 50 });
     mozjpegEncode = encode;
     wasmStatus.textContent = '✓ MozJPEG WebAssembly připraven';
@@ -567,6 +593,7 @@ let mozjpegEncode = null;
   }
 })();
 
+// ── DOM refs ────────────────────────────────────────────────
 const dropZone    = document.getElementById('dropZone');
 const fileInput   = document.getElementById('fileInput');
 const selectBtn   = document.getElementById('selectBtn');
@@ -583,8 +610,8 @@ const tabPng      = document.getElementById('tabPng');
 const dropTitle   = document.getElementById('dropTitle');
 const heroH1      = document.querySelector('.hero h1');
 
-// ── Režim (JPEG / PNG) ────────────────────────────────────
-let mode = 'jpeg'; // 'jpeg' | 'png'
+// ── Režim (JPEG / PNG) ──────────────────────────────────────
+let mode = 'jpeg';
 
 function setMode(m) {
   mode = m;
@@ -599,7 +626,6 @@ function setMode(m) {
     dropTitle.textContent = 'Přetáhni PNG soubory sem';
     heroH1.innerHTML = 'Zmenši PNG soubory<br><em>bez viditelné ztráty kvality</em>';
   }
-  // reset
   files = [];
   imagesGrid.innerHTML = '';
   toolbar.style.display = 'none';
@@ -612,7 +638,7 @@ tabPng.addEventListener('click',  e => { e.preventDefault(); setMode('png'); });
 
 let files = [];
 
-// ── Upload ────────────────────────────────────────────────
+// ── Upload ──────────────────────────────────────────────────
 selectBtn.addEventListener('click', () => fileInput.click());
 
 fileInput.addEventListener('change', () => {
@@ -639,7 +665,6 @@ function handleFiles(newFiles) {
   const toAdd = allowed.slice(0, remaining);
   if (!toAdd.length) return;
 
-  // Načteme všechny soubory – toolbar zobrazíme až po načtení prvního
   toAdd.forEach(file => {
     const reader = new FileReader();
     reader.onload = e => {
@@ -647,14 +672,14 @@ function handleFiles(newFiles) {
       files.push(item);
       item.card = createCard(item);
       imagesGrid.appendChild(item.card);
-      toolbar.style.display = 'flex'; // ← zobrazíme po načtení, ne před
+      toolbar.style.display = 'flex';
       updateStats();
     };
     reader.readAsDataURL(file);
   });
 }
 
-// ── Card ──────────────────────────────────────────────────
+// ── Card ────────────────────────────────────────────────────
 function createCard(item) {
   const card = document.createElement('div');
   card.className = 'img-card';
@@ -717,14 +742,16 @@ function createCard(item) {
   return card;
 }
 
-// ── Compress ──────────────────────────────────────────────
+// ── Compress ────────────────────────────────────────────────
 compressBtn.addEventListener('click', async () => {
   compressBtn.disabled = true;
   compressBtn.innerHTML = '<div class="spinner"></div> KOMPRIMUJI...';
   saveZipBtn.style.display = 'none';
 
+  const quality = getJpegQuality(); // přečteme jednou pro celou dávku
+
   for (const item of files) {
-    await compressSingle(item);
+    await compressSingle(item, quality);
   }
 
   compressBtn.disabled = false;
@@ -733,7 +760,7 @@ compressBtn.addEventListener('click', async () => {
   updateStats();
 });
 
-async function compressSingle(item) {
+async function compressSingle(item, quality) {
   const imageData = await decodeToImageData(item.dataUrl);
   item.progressBar.style.width = '40%';
 
@@ -741,13 +768,12 @@ async function compressSingle(item) {
   if (mode === 'jpeg') {
     let buffer;
     if (mozjpegEncode) {
-      buffer = await mozjpegEncode(imageData, { quality: QUALITY });
+      buffer = await mozjpegEncode(imageData, { quality });
     } else {
-      buffer = await canvasFallback(imageData, QUALITY / 100);
+      buffer = await canvasFallback(imageData, quality / 100);
     }
     blob = new Blob([buffer], { type: 'image/jpeg' });
   } else {
-    // PNG – bezztrátová komprese přes Canvas
     blob = await new Promise(resolve => {
       const canvas = document.createElement('canvas');
       canvas.width = imageData.width; canvas.height = imageData.height;
@@ -794,7 +820,7 @@ function canvasFallback(imageData, quality) {
   });
 }
 
-// ── Save ZIP ──────────────────────────────────────────────
+// ── Save ZIP ────────────────────────────────────────────────
 saveZipBtn.addEventListener('click', async () => {
   const ready = files.filter(f => f.compressedBlob);
   if (!ready.length) return;
@@ -827,7 +853,7 @@ function downloadSingle(item) {
   URL.revokeObjectURL(url);
 }
 
-// ── Clear ─────────────────────────────────────────────────
+// ── Clear ────────────────────────────────────────────────────
 clearBtn.addEventListener('click', () => {
   files = [];
   imagesGrid.innerHTML = '';
@@ -836,7 +862,7 @@ clearBtn.addEventListener('click', () => {
   updateStats();
 });
 
-// ── Stats ─────────────────────────────────────────────────
+// ── Stats ────────────────────────────────────────────────────
 function updateStats() {
   const totalBefore = files.reduce((s, f) => s + f.file.size, 0);
   const totalAfter  = files.reduce((s, f) => s + (f.compressedBlob ? f.compressedBlob.size : f.file.size), 0);
