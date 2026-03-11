@@ -169,7 +169,13 @@
   }
   .btn-ghost:hover { color: var(--danger); border-color: var(--danger); }
 
-  .stats-bar {
+  .btn-success {
+    background: var(--success);
+    color: #0d0f12;
+  }
+  .btn-success:hover { filter: brightness(1.1); transform: translateY(-1px); box-shadow: 0 6px 24px rgba(34,211,165,0.3); }
+
+
     display: flex; align-items: center; gap: 24px;
     font-size: 0.82rem; color: var(--muted);
   }
@@ -472,31 +478,22 @@
 <main>
   <div class="hero">
     <h1>Zmenši JPEG soubory<br><em>bez viditelné ztráty kvality</em></h1>
-    <p>Vše probíhá přímo v prohlížeči – tvoje fotky nikdy neopustí zařízení. Až 20 souborů najednou.</p>
+    <p>Vše probíhá přímo v prohlížeči – tvoje fotky nikdy neopustí zařízení. Až 100 souborů najednou.</p>
   </div>
 
-  <label class="upload-zone" id="dropZone" for="fileInput">
-    <input type="file" id="fileInput" accept="image/jpeg,image/jpg,image/*" multiple style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;">
+  <input type="file" id="fileInput" accept="image/*" multiple style="display:none;">
+  <div class="upload-zone" id="dropZone">
     <div class="upload-icon">📸</div>
     <h2>Přetáhni soubory sem</h2>
-    <p>nebo klikni a vyber JPEG fotky (max. 20 souborů)</p>
+    <p>nebo klikni na tlačítko a vyber JPEG fotky (max. 20 souborů)</p>
     <br>
-    <span class="btn btn-primary" style="pointer-events:none;">
-      VYBRAT SOUBORY
-    </span>
-  </label>
-
-  <div class="quality-global" id="qualityGlobal" style="display:none">
-    <label>GLOBÁLNÍ KVALITA</label>
-    <input type="range" id="globalQuality" min="1" max="100" value="80">
-    <span class="quality-value" id="globalQualityValue">80</span>
+    <button class="btn btn-primary" id="selectBtn">VYBRAT SOUBORY</button>
   </div>
 
   <div class="toolbar" id="toolbar" style="display:none">
     <div class="toolbar-left">
-      <button class="btn btn-primary" id="compressBtn">
-        <span>KOMPRIMOVAT</span>
-      </button>
+      <button class="btn btn-primary" id="compressBtn">⚡ KOMPRIMOVAT VŠE</button>
+      <button class="btn btn-success" id="saveZipBtn" style="display:none">⬇ ULOŽIT VŠE (ZIP)</button>
       <button class="btn btn-ghost" id="clearBtn">✕ SMAZAT VŠE</button>
     </div>
     <div class="stats-bar" id="statsBar">
@@ -509,11 +506,6 @@
   <div class="images-grid" id="imagesGrid"></div>
   <div class="empty-state" id="emptyState">Žádné soubory. Přidej obrázky výše.</div>
 </main>
-
-<div class="save-all-bar" id="saveAllBar">
-  <span class="save-all-label">Připraveno: <strong id="saveAllCount">0</strong> souborů</span>
-  <button class="btn btn-primary" id="saveAllBtn">⬇ STÁHNOUT VŠE</button>
-</div>
 
 <main>
   <article>
@@ -547,56 +539,53 @@
   <p>© 2025 Zmensito.cz | Nástroj pro kompresi obrázků v prohlížeči</p>
 </footer>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>
-const dropZone = document.getElementById('dropZone');
-const fileInput = document.getElementById('fileInput');
-const imagesGrid = document.getElementById('imagesGrid');
-const toolbar = document.getElementById('toolbar');
-const qualityGlobal = document.getElementById('qualityGlobal');
+const QUALITY = 0.97; // 97% pevná kvalita
+const MAX_FILES = 100;
+
+const dropZone    = document.getElementById('dropZone');
+const fileInput   = document.getElementById('fileInput');
+const selectBtn   = document.getElementById('selectBtn');
+const imagesGrid  = document.getElementById('imagesGrid');
+const toolbar     = document.getElementById('toolbar');
 const compressBtn = document.getElementById('compressBtn');
-const clearBtn = document.getElementById('clearBtn');
-const globalQualitySlider = document.getElementById('globalQuality');
-const globalQualityValue = document.getElementById('globalQualityValue');
-const saveAllBar = document.getElementById('saveAllBar');
-const saveAllBtn = document.getElementById('saveAllBtn');
-const saveAllCount = document.getElementById('saveAllCount');
-const statBefore = document.getElementById('statBefore');
-const statAfter = document.getElementById('statAfter');
-const statSaving = document.getElementById('statSaving');
+const saveZipBtn  = document.getElementById('saveZipBtn');
+const clearBtn    = document.getElementById('clearBtn');
+const statBefore  = document.getElementById('statBefore');
+const statAfter   = document.getElementById('statAfter');
+const statSaving  = document.getElementById('statSaving');
 
-let files = []; // {file, dataUrl, compressedBlob, quality, card}
+let files = [];
 
-// Drag & Drop
-dropZone.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); dropZone.classList.add('drag-over'); });
-dropZone.addEventListener('dragleave', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); });
+// ── Upload ────────────────────────────────────────────────
+selectBtn.addEventListener('click', () => fileInput.click());
+
+fileInput.addEventListener('change', () => {
+  if (fileInput.files.length > 0) { handleFiles([...fileInput.files]); fileInput.value = ''; }
+});
+
+dropZone.addEventListener('dragenter', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', e => { if (!dropZone.contains(e.relatedTarget)) dropZone.classList.remove('drag-over'); });
 dropZone.addEventListener('drop', e => {
   e.preventDefault();
-  e.stopPropagation();
   dropZone.classList.remove('drag-over');
-  handleFiles([...e.dataTransfer.files]);
-});
-fileInput.addEventListener('change', e => {
-  if (fileInput.files && fileInput.files.length > 0) {
-    handleFiles([...fileInput.files]);
-  }
-  fileInput.value = '';
+  const dropped = [...e.dataTransfer.files].filter(f => f.type.startsWith('image/'));
+  if (dropped.length) handleFiles(dropped);
 });
 
 function handleFiles(newFiles) {
-  const jpegs = newFiles.filter(f => f.type.startsWith('image/'));
-  const remaining = 20 - files.length;
-  jpegs.slice(0, remaining).forEach(f => addFile(f));
-  if (files.length > 0) {
-    toolbar.style.display = 'flex';
-    qualityGlobal.style.display = 'flex';
-  }
+  const remaining = MAX_FILES - files.length;
+  newFiles.filter(f => f.type.startsWith('image/')).slice(0, remaining).forEach(addFile);
+  if (files.length > 0) toolbar.style.display = 'flex';
   updateStats();
 }
 
 function addFile(file) {
   const reader = new FileReader();
   reader.onload = e => {
-    const item = { file, dataUrl: e.target.result, compressedBlob: null, quality: parseInt(globalQualitySlider.value), card: null };
+    const item = { file, dataUrl: e.target.result, compressedBlob: null };
     files.push(item);
     item.card = createCard(item);
     imagesGrid.appendChild(item.card);
@@ -605,6 +594,7 @@ function addFile(file) {
   reader.readAsDataURL(file);
 }
 
+// ── Card ──────────────────────────────────────────────────
 function createCard(item) {
   const card = document.createElement('div');
   card.className = 'img-card';
@@ -613,23 +603,25 @@ function createCard(item) {
   img.className = 'img-thumb';
   img.src = item.dataUrl;
 
+  // remove button
   const overlay = document.createElement('div');
   overlay.className = 'img-overlay';
-
-  const settingsBtn = document.createElement('button');
-  settingsBtn.className = 'img-btn';
-  settingsBtn.title = 'Nastavení kvality';
-  settingsBtn.innerHTML = '⚙';
-  settingsBtn.onclick = () => panel.classList.toggle('open');
-
   const removeBtn = document.createElement('button');
   removeBtn.className = 'img-btn danger';
   removeBtn.title = 'Odstranit';
   removeBtn.innerHTML = '✕';
-  removeBtn.onclick = () => removeFile(item, card);
-
-  overlay.appendChild(settingsBtn);
+  removeBtn.onclick = () => { files = files.filter(f => f !== item); card.remove(); if (!files.length) { toolbar.style.display = 'none'; saveZipBtn.style.display = 'none'; } updateStats(); };
   overlay.appendChild(removeBtn);
+
+  // download single button (hidden until compressed)
+  const dlBtn = document.createElement('button');
+  dlBtn.className = 'img-btn';
+  dlBtn.title = 'Stáhnout';
+  dlBtn.innerHTML = '⬇';
+  dlBtn.style.display = 'none';
+  dlBtn.onclick = () => downloadSingle(item);
+  overlay.appendChild(dlBtn);
+  item.dlBtn = dlBtn;
 
   const info = document.createElement('div');
   info.className = 'img-info';
@@ -640,131 +632,120 @@ function createCard(item) {
 
   const sizes = document.createElement('div');
   sizes.className = 'img-sizes';
-  sizes.innerHTML = `<span class="size-before">${fmtSize(item.file.size)}</span><span class="arrow">→</span><span class="size-after">–</span><span class="size-pct" style="display:none">–</span>`;
+  sizes.innerHTML = `<span class="size-before">${fmtSize(item.file.size)}</span><span class="arrow">→</span><span class="size-after">–</span><span class="size-pct" style="display:none"></span>`;
   item.sizesEl = sizes;
 
   info.appendChild(name);
   info.appendChild(sizes);
 
-  // Per-image quality panel
-  const panel = document.createElement('div');
-  panel.className = 'img-quality-panel';
-  panel.innerHTML = `
-    <label>KVALITA <span class="pq-val">${item.quality}</span></label>
-    <input type="range" min="1" max="100" value="${item.quality}" class="pq-slider">
-    <div class="panel-actions">
-      <button class="btn btn-primary pq-apply">Aplikovat</button>
-      <button class="btn btn-secondary pq-download" style="display:none">⬇ Stáhnout</button>
-    </div>
-  `;
-  item.panel = panel;
-
-  const pqSlider = panel.querySelector('.pq-slider');
-  const pqVal = panel.querySelector('.pq-val');
-  const pqApply = panel.querySelector('.pq-apply');
-  const pqDownload = panel.querySelector('.pq-download');
-  item.pqDownload = pqDownload;
-
-  pqSlider.addEventListener('input', () => {
-    item.quality = parseInt(pqSlider.value);
-    pqVal.textContent = item.quality;
-  });
-  pqApply.addEventListener('click', () => compressSingle(item));
-  pqDownload.addEventListener('click', () => downloadFile(item));
-
   const statusBar = document.createElement('div');
   statusBar.className = 'img-status';
-  const statusBarInner = document.createElement('div');
-  statusBarInner.className = 'img-status-bar';
-  statusBarInner.style.width = '0%';
-  statusBar.appendChild(statusBarInner);
-  item.progressBar = statusBarInner;
+  const bar = document.createElement('div');
+  bar.className = 'img-status-bar';
+  bar.style.width = '0';
+  statusBar.appendChild(bar);
+  item.progressBar = bar;
 
   card.appendChild(img);
   card.appendChild(overlay);
   card.appendChild(info);
-  card.appendChild(panel);
   card.appendChild(statusBar);
   return card;
 }
 
-function removeFile(item, card) {
-  files = files.filter(f => f !== item);
-  card.remove();
-  if (files.length === 0) {
-    toolbar.style.display = 'none';
-    qualityGlobal.style.display = 'none';
-    saveAllBar.classList.remove('visible');
-  }
-  updateStats();
-}
-
-clearBtn.addEventListener('click', () => {
-  files = [];
-  imagesGrid.innerHTML = '';
-  toolbar.style.display = 'none';
-  qualityGlobal.style.display = 'none';
-  saveAllBar.classList.remove('visible');
-  updateStats();
-});
-
-globalQualitySlider.addEventListener('input', () => {
-  globalQualityValue.textContent = globalQualitySlider.value;
-  files.forEach(item => {
-    item.quality = parseInt(globalQualitySlider.value);
-    const pqSlider = item.panel.querySelector('.pq-slider');
-    const pqVal = item.panel.querySelector('.pq-val');
-    if (pqSlider) { pqSlider.value = item.quality; pqVal.textContent = item.quality; }
-  });
-});
-
+// ── Compress ──────────────────────────────────────────────
 compressBtn.addEventListener('click', async () => {
   compressBtn.disabled = true;
   compressBtn.innerHTML = '<div class="spinner"></div> KOMPRIMUJI...';
+  saveZipBtn.style.display = 'none';
+
   for (const item of files) {
-    await compressSingle(item, false);
+    await compressSingle(item);
   }
+
   compressBtn.disabled = false;
-  compressBtn.innerHTML = '<span>KOMPRIMOVAT</span>';
+  compressBtn.innerHTML = '⚡ KOMPRIMOVAT VŠE';
+  saveZipBtn.style.display = 'inline-flex';
   updateStats();
-  updateSaveAll();
 });
 
-async function compressSingle(item, updateUI = true) {
+function compressSingle(item) {
   return new Promise(resolve => {
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement('canvas');
       canvas.width = img.naturalWidth;
       canvas.height = img.naturalHeight;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0);
-      item.progressBar.style.width = '60%';
+      canvas.getContext('2d').drawImage(img, 0, 0);
+      item.progressBar.style.width = '50%';
       canvas.toBlob(blob => {
         item.compressedBlob = blob;
         item.progressBar.style.width = '100%';
-        // Update sizes display
-        const sizesEl = item.sizesEl;
-        const after = sizesEl.querySelector('.size-after');
-        const pct = sizesEl.querySelector('.size-pct');
+        // update sizes
+        const after = item.sizesEl.querySelector('.size-after');
+        const pct   = item.sizesEl.querySelector('.size-pct');
         after.textContent = fmtSize(blob.size);
-        const reduction = ((item.file.size - blob.size) / item.file.size * 100).toFixed(0);
+        const reduction = Math.max(0, ((item.file.size - blob.size) / item.file.size * 100)).toFixed(0);
         pct.textContent = `-${reduction}%`;
         pct.style.display = 'inline';
-        if (item.pqDownload) item.pqDownload.style.display = 'inline-flex';
-        if (updateUI) { updateStats(); updateSaveAll(); }
+        item.dlBtn.style.display = 'flex';
         resolve();
-      }, 'image/jpeg', item.quality / 100);
+      }, 'image/jpeg', QUALITY);
     };
     img.src = item.dataUrl;
   });
 }
 
+// ── Save ZIP ──────────────────────────────────────────────
+saveZipBtn.addEventListener('click', async () => {
+  const ready = files.filter(f => f.compressedBlob);
+  if (!ready.length) return;
+
+  saveZipBtn.disabled = true;
+  saveZipBtn.innerHTML = '<div class="spinner"></div> BALÍM...';
+
+  const zip = new JSZip();
+  ready.forEach(item => {
+    const baseName = item.file.name.replace(/\.[^.]+$/, '');
+    zip.file(baseName + '_compressed.jpg', item.compressedBlob);
+  });
+
+  const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'zmensito_obrazky.zip';
+  a.click();
+  URL.revokeObjectURL(url);
+
+  saveZipBtn.disabled = false;
+  saveZipBtn.innerHTML = '⬇ ULOŽIT VŠE (ZIP)';
+});
+
+function downloadSingle(item) {
+  const url = URL.createObjectURL(item.compressedBlob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = item.file.name.replace(/\.[^.]+$/, '') + '_compressed.jpg';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── Clear ─────────────────────────────────────────────────
+clearBtn.addEventListener('click', () => {
+  files = [];
+  imagesGrid.innerHTML = '';
+  toolbar.style.display = 'none';
+  saveZipBtn.style.display = 'none';
+  updateStats();
+});
+
+// ── Stats ─────────────────────────────────────────────────
 function updateStats() {
   const totalBefore = files.reduce((s, f) => s + f.file.size, 0);
-  const totalAfter = files.reduce((s, f) => s + (f.compressedBlob ? f.compressedBlob.size : f.file.size), 0);
+  const totalAfter  = files.reduce((s, f) => s + (f.compressedBlob ? f.compressedBlob.size : f.file.size), 0);
   statBefore.textContent = fmtSize(totalBefore);
-  statAfter.textContent = fmtSize(totalAfter);
+  statAfter.textContent  = fmtSize(totalAfter);
   if (files.some(f => f.compressedBlob)) {
     const pct = ((totalBefore - totalAfter) / totalBefore * 100).toFixed(0);
     statSaving.style.display = 'inline';
@@ -772,31 +753,6 @@ function updateStats() {
   } else {
     statSaving.style.display = 'none';
   }
-}
-
-function updateSaveAll() {
-  const ready = files.filter(f => f.compressedBlob).length;
-  if (ready > 0) {
-    saveAllBar.style.display = 'flex';
-    setTimeout(() => saveAllBar.classList.add('visible'), 10);
-    saveAllCount.textContent = ready;
-  } else {
-    saveAllBar.classList.remove('visible');
-  }
-}
-
-saveAllBtn.addEventListener('click', () => {
-  files.filter(f => f.compressedBlob).forEach(item => downloadFile(item));
-});
-
-function downloadFile(item) {
-  const url = URL.createObjectURL(item.compressedBlob);
-  const a = document.createElement('a');
-  a.href = url;
-  const ext = item.file.name.lastIndexOf('.');
-  a.download = (ext >= 0 ? item.file.name.slice(0, ext) : item.file.name) + '_compressed.jpg';
-  a.click();
-  URL.revokeObjectURL(url);
 }
 
 function fmtSize(bytes) {
