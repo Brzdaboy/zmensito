@@ -545,30 +545,36 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script type="module">
-import { encode, init as initJpeg } from 'https://esm.sh/@jsquash/jpeg@1.3.0';
-
-const QUALITY  = 75;   // MozJPEG quality (0-100) – odpovídá cca 97% subjektivní kvality
+const QUALITY   = 75;
 const MAX_FILES = 100;
 
-// ── WASM init ────────────────────────────────────────────
 const wasmStatus = document.getElementById('wasmStatus');
-let mozjpegReady = false;
+let mozjpegEncode = null;
 
 (async () => {
   try {
-    // Načteme WASM modul MozJPEG
-    const wasmUrl = 'https://esm.sh/@jsquash/jpeg@1.3.0/codec/enc/mozjpeg_enc.wasm';
-    const wasmResp = await fetch(wasmUrl);
+    // 1) Import encode funkce přes jsdelivr ESM
+    const { encode, init } = await import('https://cdn.jsdelivr.net/npm/@jsquash/jpeg@1.3.1/+esm');
+
+    // 2) Ručně načteme WASM binárku – jsdelivr ji hostuje na přesné cestě
+    const wasmResp = await fetch('https://cdn.jsdelivr.net/npm/@jsquash/jpeg@1.3.1/codec/enc/mozjpeg_enc.wasm');
+    if (!wasmResp.ok) throw new Error('WASM fetch failed: ' + wasmResp.status);
     const wasmBinary = await wasmResp.arrayBuffer();
-    await initJpeg(wasmBinary);
-    mozjpegReady = true;
+
+    // 3) Inicializace s binárkou
+    await init(wasmBinary);
+
+    // 4) Ověřovací encode 1×1 px
+    await encode(new ImageData(new Uint8ClampedArray(4), 1, 1), { quality: 50 });
+
+    mozjpegEncode = encode;
     wasmStatus.textContent = '✓ MozJPEG WebAssembly připraven';
     wasmStatus.style.color = 'var(--success)';
-    setTimeout(() => wasmStatus.style.opacity = '0', 2000);
+    setTimeout(() => { wasmStatus.style.opacity = '0'; }, 2500);
   } catch (e) {
-    console.warn('MozJPEG WASM se nepodařilo načíst, fallback na Canvas:', e);
-    wasmStatus.textContent = '⚠ Fallback: Canvas API (MozJPEG nedostupný)';
-    wasmStatus.style.color = 'var(--accent)';
+    console.warn('MozJPEG nedostupný, fallback na Canvas:', e);
+    wasmStatus.textContent = '⚠ Fallback: Canvas API';
+    wasmStatus.style.color = 'var(--accent2)';
   }
 })();
 
@@ -707,9 +713,9 @@ async function compressSingle(item) {
   item.progressBar.style.width = '40%';
 
   let resultBuffer;
-  if (mozjpegReady) {
+  if (mozjpegEncode) {
     // ✅ MozJPEG WebAssembly cesta
-    resultBuffer = await encode(imageData, { quality: QUALITY });
+    resultBuffer = await mozjpegEncode(imageData, { quality: QUALITY });
   } else {
     // Fallback: Canvas toBlob
     resultBuffer = await canvasFallback(imageData, QUALITY / 100);
