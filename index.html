@@ -469,9 +469,8 @@
 <nav>
   <a class="logo" href="#">Zmensito<span>.cz</span></a>
   <div class="format-tabs">
-    <a class="format-tab active" href="#">JPEG</a>
-    <a class="format-tab" href="#">PNG</a>
-    <a class="format-tab" href="#">GIF</a>
+    <a class="format-tab active" href="#" id="tabJpeg">JPEG</a>
+    <a class="format-tab" href="#" id="tabPng">PNG</a>
   </div>
 </nav>
 
@@ -481,11 +480,11 @@
     <p>Vše probíhá přímo v prohlížeči – tvoje fotky nikdy neopustí zařízení. Až 100 souborů najednou.</p>
   </div>
 
-  <input type="file" id="fileInput" accept="image/*" multiple style="display:none;">
+  <input type="file" id="fileInput" accept="image/jpeg,image/jpg" multiple style="display:none;">
   <div class="upload-zone" id="dropZone">
     <div class="upload-icon">📸</div>
-    <h2>Přetáhni soubory sem</h2>
-    <p>nebo klikni na tlačítko a vyber JPEG fotky (max. 20 souborů)</p>
+    <h2 id="dropTitle">Přetáhni JPEG soubory sem</h2>
+    <p id="dropHint">nebo klikni na tlačítko a vyber soubory (max. 100)</p>
     <br>
     <button class="btn btn-primary" id="selectBtn">VYBRAT SOUBORY</button>
   </div>
@@ -579,6 +578,37 @@ const clearBtn    = document.getElementById('clearBtn');
 const statBefore  = document.getElementById('statBefore');
 const statAfter   = document.getElementById('statAfter');
 const statSaving  = document.getElementById('statSaving');
+const tabJpeg     = document.getElementById('tabJpeg');
+const tabPng      = document.getElementById('tabPng');
+const dropTitle   = document.getElementById('dropTitle');
+const heroH1      = document.querySelector('.hero h1');
+
+// ── Režim (JPEG / PNG) ────────────────────────────────────
+let mode = 'jpeg'; // 'jpeg' | 'png'
+
+function setMode(m) {
+  mode = m;
+  tabJpeg.classList.toggle('active', m === 'jpeg');
+  tabPng.classList.toggle('active',  m === 'png');
+  if (m === 'jpeg') {
+    fileInput.accept = 'image/jpeg,image/jpg';
+    dropTitle.textContent = 'Přetáhni JPEG soubory sem';
+    heroH1.innerHTML = 'Zmenši JPEG soubory<br><em>bez viditelné ztráty kvality</em>';
+  } else {
+    fileInput.accept = 'image/png';
+    dropTitle.textContent = 'Přetáhni PNG soubory sem';
+    heroH1.innerHTML = 'Zmenši PNG soubory<br><em>bez viditelné ztráty kvality</em>';
+  }
+  // reset
+  files = [];
+  imagesGrid.innerHTML = '';
+  toolbar.style.display = 'none';
+  saveZipBtn.style.display = 'none';
+  updateStats();
+}
+
+tabJpeg.addEventListener('click', e => { e.preventDefault(); setMode('jpeg'); });
+tabPng.addEventListener('click',  e => { e.preventDefault(); setMode('png'); });
 
 let files = [];
 
@@ -595,27 +625,33 @@ dropZone.addEventListener('dragleave', e => { if (!dropZone.contains(e.relatedTa
 dropZone.addEventListener('drop', e => {
   e.preventDefault();
   dropZone.classList.remove('drag-over');
-  const dropped = [...e.dataTransfer.files].filter(f => f.type.startsWith('image/'));
-  if (dropped.length) handleFiles(dropped);
+  const allowed = mode === 'jpeg'
+    ? [...e.dataTransfer.files].filter(f => f.type === 'image/jpeg' || f.type === 'image/jpg')
+    : [...e.dataTransfer.files].filter(f => f.type === 'image/png');
+  if (allowed.length) handleFiles(allowed);
 });
 
 function handleFiles(newFiles) {
+  const allowed = mode === 'jpeg'
+    ? newFiles.filter(f => f.type === 'image/jpeg' || f.type === 'image/jpg')
+    : newFiles.filter(f => f.type === 'image/png');
   const remaining = MAX_FILES - files.length;
-  newFiles.filter(f => f.type.startsWith('image/')).slice(0, remaining).forEach(addFile);
-  if (files.length > 0) toolbar.style.display = 'flex';
-  updateStats();
-}
+  const toAdd = allowed.slice(0, remaining);
+  if (!toAdd.length) return;
 
-function addFile(file) {
-  const reader = new FileReader();
-  reader.onload = e => {
-    const item = { file, dataUrl: e.target.result, compressedBlob: null };
-    files.push(item);
-    item.card = createCard(item);
-    imagesGrid.appendChild(item.card);
-    updateStats();
-  };
-  reader.readAsDataURL(file);
+  // Načteme všechny soubory – toolbar zobrazíme až po načtení prvního
+  toAdd.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const item = { file, dataUrl: e.target.result, compressedBlob: null };
+      files.push(item);
+      item.card = createCard(item);
+      imagesGrid.appendChild(item.card);
+      toolbar.style.display = 'flex'; // ← zobrazíme po načtení, ne před
+      updateStats();
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 // ── Card ──────────────────────────────────────────────────
@@ -698,26 +734,35 @@ compressBtn.addEventListener('click', async () => {
 });
 
 async function compressSingle(item) {
-  // Dekóduj obrázek přes Canvas → ImageData
   const imageData = await decodeToImageData(item.dataUrl);
   item.progressBar.style.width = '40%';
 
-  let resultBuffer;
-  if (mozjpegEncode) {
-    // ✅ MozJPEG WebAssembly cesta
-    resultBuffer = await mozjpegEncode(imageData, { quality: QUALITY });
+  let blob;
+  if (mode === 'jpeg') {
+    let buffer;
+    if (mozjpegEncode) {
+      buffer = await mozjpegEncode(imageData, { quality: QUALITY });
+    } else {
+      buffer = await canvasFallback(imageData, QUALITY / 100);
+    }
+    blob = new Blob([buffer], { type: 'image/jpeg' });
   } else {
-    // Fallback: Canvas toBlob
-    resultBuffer = await canvasFallback(imageData, QUALITY / 100);
+    // PNG – bezztrátová komprese přes Canvas
+    blob = await new Promise(resolve => {
+      const canvas = document.createElement('canvas');
+      canvas.width = imageData.width; canvas.height = imageData.height;
+      canvas.getContext('2d').putImageData(imageData, 0, 0);
+      canvas.toBlob(resolve, 'image/png');
+    });
   }
 
   item.progressBar.style.width = '100%';
-  item.compressedBlob = new Blob([resultBuffer], { type: 'image/jpeg' });
+  item.compressedBlob = blob;
 
   const after = item.sizesEl.querySelector('.size-after');
   const pct   = item.sizesEl.querySelector('.size-pct');
-  after.textContent = fmtSize(item.compressedBlob.size);
-  const reduction = Math.max(0, ((item.file.size - item.compressedBlob.size) / item.file.size * 100)).toFixed(0);
+  after.textContent = fmtSize(blob.size);
+  const reduction = Math.max(0, ((item.file.size - blob.size) / item.file.size * 100)).toFixed(0);
   pct.textContent = `-${reduction}%`;
   pct.style.display = 'inline';
   item.dlBtn.style.display = 'flex';
@@ -758,7 +803,8 @@ saveZipBtn.addEventListener('click', async () => {
 
   const zip = new JSZip();
   ready.forEach(item => {
-    zip.file(item.file.name.replace(/\.[^.]+$/, '') + '_compressed.jpg', item.compressedBlob);
+    const ext = mode === 'jpeg' ? '_compressed.jpg' : '_compressed.png';
+    zip.file(item.file.name.replace(/\.[^.]+$/, '') + ext, item.compressedBlob);
   });
 
   const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
@@ -775,7 +821,8 @@ function downloadSingle(item) {
   const url = URL.createObjectURL(item.compressedBlob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = item.file.name.replace(/\.[^.]+$/, '') + '_compressed.jpg';
+  const ext = mode === 'jpeg' ? '_compressed.jpg' : '_compressed.png';
+  a.download = item.file.name.replace(/\.[^.]+$/, '') + ext;
   a.click();
   URL.revokeObjectURL(url);
 }
