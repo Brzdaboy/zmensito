@@ -181,25 +181,64 @@
   .stats-bar strong { color: var(--text); }
   .stats-bar .saving { color: var(--success); font-weight: 600; }
 
-  /* QUALITY GLOBAL */
+  /* ── QUALITY PANEL ── */
   .quality-global {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 18px 22px;
+    padding: 0;
     margin-top: 16px;
+    overflow: hidden;
+  }
+
+  /* Mode toggle tabs */
+  .mode-tabs {
     display: flex;
+    border-bottom: 1px solid var(--border);
+  }
+  .mode-tab {
+    flex: 1;
+    padding: 10px 16px;
+    font-family: 'Syne', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    transition: all .2s;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+  }
+  .mode-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+    background: rgba(249,115,22,0.05);
+  }
+  .mode-tab:hover:not(.active) {
+    color: var(--text);
+    background: var(--surface2);
+  }
+
+  /* Panels */
+  .mode-panel {
+    display: none;
+    padding: 18px 22px;
     align-items: center;
     gap: 18px;
     flex-wrap: wrap;
   }
-  .quality-global-left {
+  .mode-panel.active { display: flex; }
+
+  .panel-left {
     display: flex;
     flex-direction: column;
     gap: 2px;
     min-width: 120px;
   }
-  .quality-global-left label {
+  .panel-left label {
     font-size: 0.78rem;
     font-weight: 700;
     color: var(--muted);
@@ -207,13 +246,13 @@
     text-transform: uppercase;
     letter-spacing: 0.5px;
   }
-  .quality-global-left .quality-desc {
+  .panel-left .panel-desc {
     font-size: 0.75rem;
     color: var(--muted);
     opacity: 0.7;
   }
 
-  .quality-slider-wrap {
+  .slider-wrap {
     flex: 1;
     display: flex;
     flex-direction: column;
@@ -221,21 +260,19 @@
     min-width: 200px;
   }
 
-  .quality-global input[type=range] {
+  input[type=range] {
     width: 100%;
     -webkit-appearance: none;
     height: 6px;
     border-radius: 99px;
     outline: none;
     cursor: pointer;
-    background: linear-gradient(
-      to right,
-      var(--success) 0%,
-      var(--accent) 50%,
-      var(--danger) 100%
-    );
   }
-  .quality-global input[type=range]::-webkit-slider-thumb {
+  /* Quality slider: green→orange→red */
+  #qualitySlider {
+    background: linear-gradient(to right, var(--success) 0%, var(--accent) 50%, var(--danger) 100%);
+  }
+  input[type=range]::-webkit-slider-thumb {
     -webkit-appearance: none;
     width: 20px; height: 20px;
     background: var(--text);
@@ -245,10 +282,10 @@
     box-shadow: 0 0 0 2px var(--accent), 0 2px 8px rgba(0,0,0,0.4);
     transition: box-shadow .15s;
   }
-  .quality-global input[type=range]::-webkit-slider-thumb:hover {
+  input[type=range]::-webkit-slider-thumb:hover {
     box-shadow: 0 0 0 3px var(--accent), 0 2px 12px rgba(249,115,22,0.4);
   }
-  .quality-global input[type=range]::-moz-range-thumb {
+  input[type=range]::-moz-range-thumb {
     width: 20px; height: 20px;
     background: var(--text);
     border-radius: 50%;
@@ -257,7 +294,7 @@
     box-shadow: 0 0 0 2px var(--accent);
   }
 
-  .quality-labels {
+  .slider-labels {
     display: flex;
     justify-content: space-between;
     font-size: 0.7rem;
@@ -265,17 +302,15 @@
     font-family: 'Syne', sans-serif;
     font-weight: 600;
   }
-  .quality-labels span:first-child { color: var(--success); }
-  .quality-labels span:last-child  { color: var(--danger); }
 
-  .quality-value-wrap {
+  .value-wrap {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 2px;
-    min-width: 64px;
+    min-width: 72px;
   }
-  .quality-value {
+  .value-display {
     font-family: 'Syne', sans-serif;
     font-weight: 800;
     font-size: 1.5rem;
@@ -283,12 +318,35 @@
     line-height: 1;
     transition: color .2s;
   }
-  .quality-value-unit {
+  .value-unit {
     font-size: 0.7rem;
     color: var(--muted);
     font-family: 'Syne', sans-serif;
     font-weight: 600;
     text-transform: uppercase;
+  }
+
+  /* Target size slider: red→orange→green (large→small) */
+  #sizeSlider {
+    background: linear-gradient(to right, var(--danger) 0%, var(--accent) 50%, var(--success) 100%);
+    direction: ltr;
+  }
+
+  /* Note under size panel */
+  .size-note {
+    width: 100%;
+    font-size: 0.73rem;
+    color: var(--muted);
+    margin-top: -6px;
+    padding-top: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .size-note em {
+    font-style: normal;
+    color: var(--accent);
+    font-weight: 600;
   }
 
   /* GRID */
@@ -361,6 +419,10 @@
     padding: 2px 7px;
     font-size: 0.7rem;
     font-weight: 700;
+  }
+  .size-pct.warn {
+    background: rgba(249,115,22,0.12);
+    color: var(--accent);
   }
 
   .img-status {
@@ -439,7 +501,7 @@
     nav { padding: 14px 16px; }
     main { padding: 28px 16px 60px; }
     .images-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
-    .quality-global { gap: 12px; }
+    .mode-panel { gap: 12px; }
   }
 </style>
 </head>
@@ -468,23 +530,56 @@
     <button class="btn btn-primary" id="selectBtn">VYBRAT SOUBORY</button>
   </div>
 
-  <!-- GLOBAL QUALITY SLIDER -->
+  <!-- COMPRESSION PANEL -->
   <div class="quality-global" id="qualityPanel">
-    <div class="quality-global-left">
-      <label for="qualitySlider">Míra komprese</label>
-      <span class="quality-desc">0 % = nejlepší kvalita</span>
+
+    <!-- Mode switcher -->
+    <div class="mode-tabs">
+      <button class="mode-tab active" id="modeQualityBtn">⚙ Míra komprese</button>
+      <button class="mode-tab" id="modeSizeBtn">🎯 Cílová velikost</button>
     </div>
-    <div class="quality-slider-wrap">
-      <input type="range" id="qualitySlider" min="0" max="100" value="25">
-      <div class="quality-labels">
-        <span>0 % – nejlepší kvalita</span>
-        <span>100 % – nejvyšší komprese</span>
+
+    <!-- Panel A: % komprese -->
+    <div class="mode-panel active" id="panelQuality">
+      <div class="panel-left">
+        <label for="qualitySlider">Míra komprese</label>
+        <span class="panel-desc">0 % = nejlepší kvalita</span>
+      </div>
+      <div class="slider-wrap">
+        <input type="range" id="qualitySlider" min="0" max="100" value="25">
+        <div class="slider-labels">
+          <span style="color:var(--success)">0 % – nejlepší kvalita</span>
+          <span style="color:var(--danger)">100 % – nejvyšší komprese</span>
+        </div>
+      </div>
+      <div class="value-wrap">
+        <span class="value-display" id="qualityDisplay">25</span>
+        <span class="value-unit">komprese</span>
       </div>
     </div>
-    <div class="quality-value-wrap">
-      <span class="quality-value" id="qualityDisplay">25</span>
-      <span class="quality-value-unit">komprese</span>
+
+    <!-- Panel B: cílová velikost -->
+    <div class="mode-panel" id="panelSize">
+      <div class="panel-left">
+        <label for="sizeSlider">Cílová velikost</label>
+        <span class="panel-desc">Automaticky najde<br>vhodnou kvalitu</span>
+      </div>
+      <div class="slider-wrap">
+        <input type="range" id="sizeSlider" min="1" max="10000" value="500" step="1">
+        <div class="slider-labels">
+          <span style="color:var(--danger)" id="sizeSliderMax">max. velikost</span>
+          <span style="color:var(--success)">1 KB</span>
+        </div>
+      </div>
+      <div class="value-wrap">
+        <span class="value-display" id="sizeDisplay">500</span>
+        <span class="value-unit" id="sizeUnit">KB</span>
+      </div>
+      <div class="size-note" id="sizeNote" style="display:none">
+        ⚠ Cíl je menší než <em id="sizeNoteMin">–</em> – použita nejmenší dosažitelná velikost.
+      </div>
     </div>
+
   </div>
 
   <div id="wasmStatus" style="text-align:center;margin-top:10px;font-size:0.78rem;color:var(--muted);transition:opacity 1s;">
@@ -543,8 +638,32 @@
 <script type="module">
 const MAX_FILES = 100;
 
+// ── Compression mode ─────────────────────────────────────────
+// 'quality' = % komprese slider  |  'size' = cílová velikost v KB
+let compressionMode = 'quality';
+
+const modeQualityBtn = document.getElementById('modeQualityBtn');
+const modeSizeBtn    = document.getElementById('modeSizeBtn');
+const panelQuality   = document.getElementById('panelQuality');
+const panelSize      = document.getElementById('panelSize');
+
+modeQualityBtn.addEventListener('click', () => {
+  compressionMode = 'quality';
+  modeQualityBtn.classList.add('active');
+  modeSizeBtn.classList.remove('active');
+  panelQuality.classList.add('active');
+  panelSize.classList.remove('active');
+});
+modeSizeBtn.addEventListener('click', () => {
+  compressionMode = 'size';
+  modeSizeBtn.classList.add('active');
+  modeQualityBtn.classList.remove('active');
+  panelSize.classList.add('active');
+  panelQuality.classList.remove('active');
+});
+
+// ── Quality slider (mode: quality) ──────────────────────────
 // Slider: 0 = nejlepší kvalita (JPEG quality 100), 100 = nejvyšší komprese (JPEG quality 1)
-// Převod: jpegQuality = 100 - sliderValue   (min 1, aby JPEG byl validní)
 const qualitySlider  = document.getElementById('qualitySlider');
 const qualityDisplay = document.getElementById('qualityDisplay');
 
@@ -555,26 +674,58 @@ function getJpegQuality() {
 function updateQualityDisplay() {
   const val = parseInt(qualitySlider.value);
   qualityDisplay.textContent = val;
-
-  // Barva hodnoty podle intenzity komprese
-  if (val <= 30)       qualityDisplay.style.color = 'var(--success)';
-  else if (val <= 65)  qualityDisplay.style.color = 'var(--accent)';
-  else                 qualityDisplay.style.color = 'var(--danger)';
-
-  // Dynamický gradient na slideru
-  const pct = val;
-  qualitySlider.style.background = `linear-gradient(
-    to right,
-    var(--success) 0%,
-    var(--accent) 50%,
-    var(--danger) 100%
-  )`;
+  if (val <= 30)      qualityDisplay.style.color = 'var(--success)';
+  else if (val <= 65) qualityDisplay.style.color = 'var(--accent)';
+  else                qualityDisplay.style.color = 'var(--danger)';
 }
 
 qualitySlider.addEventListener('input', updateQualityDisplay);
 updateQualityDisplay();
 
-// ── WASM ────────────────────────────────────────────────────
+// ── Size slider (mode: size) ─────────────────────────────────
+const sizeSlider    = document.getElementById('sizeSlider');
+const sizeDisplay   = document.getElementById('sizeDisplay');
+const sizeUnit      = document.getElementById('sizeUnit');
+const sizeSliderMax = document.getElementById('sizeSliderMax');
+const sizeNote      = document.getElementById('sizeNote');
+const sizeNoteMin   = document.getElementById('sizeNoteMin');
+
+// Maximální hodnota slideru v KB – aktualizuje se po načtení souborů
+let sliderMaxKB = 10000;
+
+function updateSizeDisplay() {
+  const kb = parseInt(sizeSlider.value);
+  if (kb >= 1024) {
+    sizeDisplay.textContent = (kb / 1024).toFixed(1);
+    sizeUnit.textContent = 'MB';
+  } else {
+    sizeDisplay.textContent = kb;
+    sizeUnit.textContent = 'KB';
+  }
+  // Barva: blízko max = červená, střed = oranžová, malé = zelená
+  const ratio = kb / sliderMaxKB;
+  if (ratio > 0.65)      sizeDisplay.style.color = 'var(--danger)';
+  else if (ratio > 0.25) sizeDisplay.style.color = 'var(--accent)';
+  else                   sizeDisplay.style.color = 'var(--success)';
+}
+
+sizeSlider.addEventListener('input', updateSizeDisplay);
+updateSizeDisplay();
+
+// Aktualizuje rozsah slideru podle největšího nahraného souboru
+function refreshSizeSlider() {
+  if (!files.length) return;
+  const maxBytes = Math.max(...files.map(f => f.file.size));
+  sliderMaxKB = Math.ceil(maxBytes / 1024);
+  sizeSlider.max = sliderMaxKB;
+  // Výchozí pozice: 25 % originální velikosti, ale min 10 KB
+  const defaultKB = Math.max(10, Math.round(sliderMaxKB * 0.25));
+  sizeSlider.value = Math.min(defaultKB, sliderMaxKB);
+  sizeSliderMax.textContent = fmtSize(maxBytes);
+  updateSizeDisplay();
+}
+
+// ── WASM ─────────────────────────────────────────────────────
 const wasmStatus = document.getElementById('wasmStatus');
 let mozjpegEncode = null;
 
@@ -593,7 +744,7 @@ let mozjpegEncode = null;
   }
 })();
 
-// ── DOM refs ────────────────────────────────────────────────
+// ── DOM refs ──────────────────────────────────────────────────
 const dropZone    = document.getElementById('dropZone');
 const fileInput   = document.getElementById('fileInput');
 const selectBtn   = document.getElementById('selectBtn');
@@ -610,7 +761,7 @@ const tabPng      = document.getElementById('tabPng');
 const dropTitle   = document.getElementById('dropTitle');
 const heroH1      = document.querySelector('.hero h1');
 
-// ── Režim (JPEG / PNG) ──────────────────────────────────────
+// ── Režim (JPEG / PNG) ────────────────────────────────────────
 let mode = 'jpeg';
 
 function setMode(m) {
@@ -638,7 +789,7 @@ tabPng.addEventListener('click',  e => { e.preventDefault(); setMode('png'); });
 
 let files = [];
 
-// ── Upload ──────────────────────────────────────────────────
+// ── Upload ────────────────────────────────────────────────────
 selectBtn.addEventListener('click', () => fileInput.click());
 
 fileInput.addEventListener('change', () => {
@@ -673,13 +824,14 @@ function handleFiles(newFiles) {
       item.card = createCard(item);
       imagesGrid.appendChild(item.card);
       toolbar.style.display = 'flex';
+      refreshSizeSlider(); // aktualizuj slider po každém přidání
       updateStats();
     };
     reader.readAsDataURL(file);
   });
 }
 
-// ── Card ────────────────────────────────────────────────────
+// ── Card ──────────────────────────────────────────────────────
 function createCard(item) {
   const card = document.createElement('div');
   card.className = 'img-card';
@@ -699,6 +851,7 @@ function createCard(item) {
     files = files.filter(f => f !== item);
     card.remove();
     if (!files.length) { toolbar.style.display = 'none'; saveZipBtn.style.display = 'none'; }
+    if (files.length) refreshSizeSlider();
     updateStats();
   };
   overlay.appendChild(removeBtn);
@@ -742,16 +895,39 @@ function createCard(item) {
   return card;
 }
 
-// ── Compress ────────────────────────────────────────────────
+// ── Compress ──────────────────────────────────────────────────
 compressBtn.addEventListener('click', async () => {
   compressBtn.disabled = true;
   compressBtn.innerHTML = '<div class="spinner"></div> KOMPRIMUJI...';
   saveZipBtn.style.display = 'none';
+  sizeNote.style.display = 'none';
 
-  const quality = getJpegQuality(); // přečteme jednou pro celou dávku
+  if (compressionMode === 'quality') {
+    // Klasický režim: pevná kvalita pro celou dávku
+    const quality = getJpegQuality();
+    for (const item of files) {
+      await compressSingle(item, { mode: 'quality', quality });
+    }
+  } else {
+    // Cílová velikost: každý soubor dostane svůj target v bytes
+    const targetKB     = parseInt(sizeSlider.value);
+    const targetBytes  = targetKB * 1024;
+    let anyClipped = false;
+    let minAchievedKB = Infinity;
 
-  for (const item of files) {
-    await compressSingle(item, quality);
+    for (const item of files) {
+      const result = await compressSingle(item, { mode: 'size', targetBytes });
+      if (result && result.clipped) {
+        anyClipped = true;
+        minAchievedKB = Math.min(minAchievedKB, Math.ceil(result.achievedBytes / 1024));
+      }
+    }
+
+    // Zobraz varování pokud cíl nebyl dosažitelný
+    if (anyClipped) {
+      sizeNote.style.display = 'flex';
+      sizeNoteMin.textContent = minAchievedKB + ' KB';
+    }
   }
 
   compressBtn.disabled = false;
@@ -760,20 +936,77 @@ compressBtn.addEventListener('click', async () => {
   updateStats();
 });
 
-async function compressSingle(item, quality) {
+/**
+ * Zkomprimuje jeden soubor.
+ * opts.mode === 'quality' → pevná kvalita (opts.quality)
+ * opts.mode === 'size'    → binární hledání kvality pro cílovou velikost (opts.targetBytes)
+ * Vrací { clipped, achievedBytes } pro size mode, jinak null.
+ */
+async function compressSingle(item, opts) {
   const imageData = await decodeToImageData(item.dataUrl);
-  item.progressBar.style.width = '40%';
+  item.progressBar.style.width = '20%';
 
   let blob;
+  let clipped = false;
+  let achievedBytes = 0;
+
   if (mode === 'jpeg') {
     let buffer;
-    if (mozjpegEncode) {
-      buffer = await mozjpegEncode(imageData, { quality });
+
+    if (opts.mode === 'quality') {
+      buffer = mozjpegEncode
+        ? await mozjpegEncode(imageData, { quality: opts.quality })
+        : await canvasFallback(imageData, opts.quality / 100);
+
     } else {
-      buffer = await canvasFallback(imageData, quality / 100);
+      // Binární hledání: najdi nejvyšší JPEG quality ≤ targetBytes
+      const targetBytes = opts.targetBytes;
+      let lo = 1, hi = 95;
+      let bestBuffer = null;
+
+      // Nejprve zkus jestli quality=1 vůbec vejde (nejmenší možné)
+      const minBuffer = mozjpegEncode
+        ? await mozjpegEncode(imageData, { quality: 1 })
+        : await canvasFallbackBuf(imageData, 0.01);
+
+      item.progressBar.style.width = '35%';
+
+      if (minBuffer.byteLength > targetBytes) {
+        // Ani nejnižší kvalita nestačí – použij quality=1
+        bestBuffer = minBuffer;
+        clipped = true;
+        achievedBytes = minBuffer.byteLength;
+      } else {
+        // Binární hledání (8 iterací ≈ přesnost 1 bod kvality)
+        for (let iter = 0; iter < 8; iter++) {
+          const mid = Math.round((lo + hi) / 2);
+          const buf = mozjpegEncode
+            ? await mozjpegEncode(imageData, { quality: mid })
+            : await canvasFallbackBuf(imageData, mid / 100);
+
+          item.progressBar.style.width = (35 + iter * 7) + '%';
+
+          if (buf.byteLength <= targetBytes) {
+            bestBuffer = buf;
+            lo = mid + 1; // zkus ještě vyšší kvalitu
+          } else {
+            hi = mid - 1; // moc velké → sniž kvalitu
+          }
+          if (lo > hi) break;
+        }
+        if (!bestBuffer) {
+          bestBuffer = minBuffer; // záchrana – nemělo by nastat
+          clipped = true;
+          achievedBytes = minBuffer.byteLength;
+        }
+      }
+      buffer = bestBuffer;
     }
+
     blob = new Blob([buffer], { type: 'image/jpeg' });
+
   } else {
+    // PNG – jen canvas, ignorujeme size mode (PNG komprese je bezeztrátová)
     blob = await new Promise(resolve => {
       const canvas = document.createElement('canvas');
       canvas.width = imageData.width; canvas.height = imageData.height;
@@ -791,7 +1024,18 @@ async function compressSingle(item, quality) {
   const reduction = Math.max(0, ((item.file.size - blob.size) / item.file.size * 100)).toFixed(0);
   pct.textContent = `-${reduction}%`;
   pct.style.display = 'inline';
+
+  // Pokud cíl nebyl dosažitelný, zvýrazni kartu oranžově
+  if (clipped) {
+    pct.classList.add('warn');
+    pct.textContent = '⚠ min';
+  } else {
+    pct.classList.remove('warn');
+  }
+
   item.dlBtn.style.display = 'flex';
+
+  return clipped ? { clipped: true, achievedBytes: blob.size } : null;
 }
 
 function decodeToImageData(dataUrl) {
@@ -810,7 +1054,8 @@ function decodeToImageData(dataUrl) {
   });
 }
 
-function canvasFallback(imageData, quality) {
+// Vrátí ArrayBuffer (pro binární hledání)
+function canvasFallbackBuf(imageData, quality) {
   return new Promise(resolve => {
     const canvas = document.createElement('canvas');
     canvas.width  = imageData.width;
@@ -820,7 +1065,12 @@ function canvasFallback(imageData, quality) {
   });
 }
 
-// ── Save ZIP ────────────────────────────────────────────────
+// Původní fallback (pro mode: quality) – vrací ArrayBuffer
+function canvasFallback(imageData, quality) {
+  return canvasFallbackBuf(imageData, quality);
+}
+
+// ── Save ZIP ──────────────────────────────────────────────────
 saveZipBtn.addEventListener('click', async () => {
   const ready = files.filter(f => f.compressedBlob);
   if (!ready.length) return;
@@ -853,16 +1103,17 @@ function downloadSingle(item) {
   URL.revokeObjectURL(url);
 }
 
-// ── Clear ────────────────────────────────────────────────────
+// ── Clear ──────────────────────────────────────────────────────
 clearBtn.addEventListener('click', () => {
   files = [];
   imagesGrid.innerHTML = '';
   toolbar.style.display = 'none';
   saveZipBtn.style.display = 'none';
+  sizeNote.style.display = 'none';
   updateStats();
 });
 
-// ── Stats ────────────────────────────────────────────────────
+// ── Stats ──────────────────────────────────────────────────────
 function updateStats() {
   const totalBefore = files.reduce((s, f) => s + f.file.size, 0);
   const totalAfter  = files.reduce((s, f) => s + (f.compressedBlob ? f.compressedBlob.size : f.file.size), 0);
