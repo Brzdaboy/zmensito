@@ -17,7 +17,7 @@
     --accent: #f97316;
     --accent2: #fb923c;
     --text: #e8ecf4;
-    --muted: #6b7894;
+    --muted: #8fa3bf;
     --success: #22d3a5;
     --danger: #f43f5e;
     --radius: 12px;
@@ -249,7 +249,6 @@
   .panel-left .panel-desc {
     font-size: 0.75rem;
     color: var(--muted);
-    opacity: 0.7;
   }
 
   .slider-wrap {
@@ -297,7 +296,7 @@
   .slider-labels {
     display: flex;
     justify-content: space-between;
-    font-size: 0.7rem;
+    font-size: 0.75rem;
     color: var(--muted);
     font-family: 'Syne', sans-serif;
     font-weight: 600;
@@ -319,7 +318,7 @@
     transition: color .2s;
   }
   .value-unit {
-    font-size: 0.7rem;
+    font-size: 0.75rem;
     color: var(--muted);
     font-family: 'Syne', sans-serif;
     font-weight: 600;
@@ -335,7 +334,7 @@
   /* Note under size panel */
   .size-note {
     width: 100%;
-    font-size: 0.73rem;
+    font-size: 0.78rem;
     color: var(--muted);
     margin-top: -6px;
     padding-top: 0;
@@ -347,6 +346,47 @@
     font-style: normal;
     color: var(--accent);
     font-weight: 600;
+  }
+
+  /* SUFFIX PANEL */
+  .suffix-input-wrap {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    min-width: 200px;
+    max-width: 380px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    transition: border-color .2s;
+  }
+  .suffix-input-wrap:focus-within {
+    border-color: var(--accent);
+  }
+  #suffixInput {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text);
+    font-family: 'DM Sans', monospace;
+    font-size: 0.85rem;
+    padding: 9px 12px;
+    min-width: 0;
+  }
+  #suffixInput::placeholder {
+    color: var(--muted);
+    opacity: 0.55;
+  }
+  .suffix-ext {
+    padding: 9px 12px;
+    font-size: 0.8rem;
+    color: var(--muted);
+    background: rgba(0,0,0,0.2);
+    border-left: 1px solid var(--border);
+    white-space: nowrap;
+    font-family: 'DM Sans', monospace;
   }
 
   /* GRID */
@@ -406,10 +446,10 @@
   }
   .img-sizes {
     display: flex; align-items: center; gap: 8px;
-    font-size: 0.75rem;
+    font-size: 0.78rem;
   }
   .size-before { color: var(--muted); }
-  .arrow { color: var(--border); }
+  .arrow { color: var(--muted); }
   .size-after { color: var(--success); font-weight: 600; }
   .size-pct {
     margin-left: auto;
@@ -417,7 +457,7 @@
     color: var(--success);
     border-radius: 5px;
     padding: 2px 7px;
-    font-size: 0.7rem;
+    font-size: 0.75rem;
     font-weight: 700;
   }
   .size-pct.warn {
@@ -466,7 +506,7 @@
     color: var(--accent);
     margin: 24px 0 10px;
   }
-  article p { color: var(--muted); line-height: 1.7; font-size: 0.92rem; margin-bottom: 14px; }
+  article p { color: var(--muted); line-height: 1.7; font-size: 0.95rem; margin-bottom: 14px; }
   article strong { color: var(--text); }
 
   /* PRIVACY BADGES */
@@ -537,6 +577,7 @@
     <div class="mode-tabs">
       <button class="mode-tab active" id="modeQualityBtn">⚙ Míra komprese</button>
       <button class="mode-tab" id="modeSizeBtn">🎯 Cílová velikost</button>
+      <button class="mode-tab" id="modeSuffixBtn">✏ Přípona názvu</button>
     </div>
 
     <!-- Panel A: % komprese -->
@@ -577,6 +618,18 @@
       </div>
       <div class="size-note" id="sizeNote" style="display:none">
         ⚠ Cíl je menší než <em id="sizeNoteMin">–</em> – použita nejmenší dosažitelná velikost.
+      </div>
+    </div>
+
+    <!-- Panel C: přípona názvu -->
+    <div class="mode-panel" id="panelSuffix">
+      <div class="panel-left">
+        <label for="suffixInput">Přípona názvu</label>
+        <span class="panel-desc">Prázdné = originální<br>název souboru</span>
+      </div>
+      <div class="suffix-input-wrap">
+        <input type="text" id="suffixInput" placeholder="-compressed" maxlength="40" spellcheck="false" autocomplete="off">
+        <span class="suffix-ext" id="suffixExt">.jpg</span>
       </div>
     </div>
 
@@ -644,23 +697,22 @@ let compressionMode = 'quality';
 
 const modeQualityBtn = document.getElementById('modeQualityBtn');
 const modeSizeBtn    = document.getElementById('modeSizeBtn');
+const modeSuffixBtn  = document.getElementById('modeSuffixBtn');
 const panelQuality   = document.getElementById('panelQuality');
 const panelSize      = document.getElementById('panelSize');
+const panelSuffix    = document.getElementById('panelSuffix');
 
-modeQualityBtn.addEventListener('click', () => {
-  compressionMode = 'quality';
-  modeQualityBtn.classList.add('active');
-  modeSizeBtn.classList.remove('active');
-  panelQuality.classList.add('active');
-  panelSize.classList.remove('active');
-});
-modeSizeBtn.addEventListener('click', () => {
-  compressionMode = 'size';
-  modeSizeBtn.classList.add('active');
-  modeQualityBtn.classList.remove('active');
-  panelSize.classList.add('active');
-  panelQuality.classList.remove('active');
-});
+function setActiveTab(tab) {
+  [modeQualityBtn, modeSizeBtn, modeSuffixBtn].forEach(b => b.classList.remove('active'));
+  [panelQuality, panelSize, panelSuffix].forEach(p => p.classList.remove('active'));
+  tab.btn.classList.add('active');
+  tab.panel.classList.add('active');
+  if (tab.mode) compressionMode = tab.mode;
+}
+
+modeQualityBtn.addEventListener('click', () => setActiveTab({ btn: modeQualityBtn, panel: panelQuality, mode: 'quality' }));
+modeSizeBtn.addEventListener('click',    () => setActiveTab({ btn: modeSizeBtn,    panel: panelSize,    mode: 'size' }));
+modeSuffixBtn.addEventListener('click',  () => setActiveTab({ btn: modeSuffixBtn,  panel: panelSuffix,  mode: null }));
 
 // ── Quality slider (mode: quality) ──────────────────────────
 // Slider: 0 = nejlepší kvalita (JPEG quality 100), 100 = nejvyšší komprese (JPEG quality 1)
@@ -725,7 +777,25 @@ function refreshSizeSlider() {
   updateSizeDisplay();
 }
 
-// ── WASM ─────────────────────────────────────────────────────
+// ── Suffix ────────────────────────────────────────────────────
+const suffixInput   = document.getElementById('suffixInput');
+const suffixExt     = document.getElementById('suffixExt');
+
+function getSuffix() {
+  return suffixInput.value;
+}
+
+function buildFilename(originalName) {
+  const suffix = getSuffix();
+  const ext    = mode === 'jpeg' ? '.jpg' : '.png';
+  return originalName.replace(/\.[^.]+$/, '') + suffix + ext;
+}
+
+function updateSuffixExt() {
+  suffixExt.textContent = mode === 'jpeg' ? '.jpg' : '.png';
+}
+
+
 const wasmStatus = document.getElementById('wasmStatus');
 let mozjpegEncode = null;
 
@@ -781,6 +851,7 @@ function setMode(m) {
   imagesGrid.innerHTML = '';
   toolbar.style.display = 'none';
   saveZipBtn.style.display = 'none';
+  updateSuffixExt();
   updateStats();
 }
 
@@ -1079,8 +1150,7 @@ saveZipBtn.addEventListener('click', async () => {
 
   const zip = new JSZip();
   ready.forEach(item => {
-    const ext = mode === 'jpeg' ? '_compressed.jpg' : '_compressed.png';
-    zip.file(item.file.name.replace(/\.[^.]+$/, '') + ext, item.compressedBlob);
+    zip.file(buildFilename(item.file.name), item.compressedBlob);
   });
 
   const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
@@ -1097,8 +1167,7 @@ function downloadSingle(item) {
   const url = URL.createObjectURL(item.compressedBlob);
   const a = document.createElement('a');
   a.href = url;
-  const ext = mode === 'jpeg' ? '_compressed.jpg' : '_compressed.png';
-  a.download = item.file.name.replace(/\.[^.]+$/, '') + ext;
+  a.download = buildFilename(item.file.name);
   a.click();
   URL.revokeObjectURL(url);
 }
