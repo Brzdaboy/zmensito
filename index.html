@@ -688,6 +688,8 @@
 </footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/upng-js@2.1.0/UPNG.js"></script>
 <script type="module">
 const MAX_FILES = 100;
 
@@ -797,8 +799,7 @@ function updateSuffixExt() {
 
 
 const wasmStatus = document.getElementById('wasmStatus');
-let mozjpegEncode  = null;
-let oxipngOptimise = null;
+let mozjpegEncode = null;
 
 (async () => {
   let parts = [];
@@ -812,17 +813,10 @@ let oxipngOptimise = null;
     console.warn('MozJPEG nedostupný, fallback na Canvas:', e);
   }
 
-  try {
-    const mod = await import('https://unpkg.com/@jsquash/oxipng@2.0.0?module');
-    const fn = mod.default ?? mod.optimise;
-    if (typeof fn === 'function') { oxipngOptimise = fn; parts.push('OxiPNG'); }
-    else throw new Error('OxiPNG export není funkce');
-  } catch (e) {
-    console.warn('OxiPNG nedostupný:', e);
-  }
+  if (typeof UPNG !== 'undefined') parts.push('UPNG');
 
   if (parts.length) {
-    wasmStatus.textContent = `✓ WebAssembly připraven (${parts.join(' + ')})`;
+    wasmStatus.textContent = `✓ Komprese připravena (${parts.join(' + ')})`;
     wasmStatus.style.color = 'var(--success)';
     setTimeout(() => { wasmStatus.style.opacity = '0'; }, 2500);
   } else {
@@ -1096,9 +1090,10 @@ async function compressSingle(item, opts) {
     blob = new Blob([buffer], { type: 'image/jpeg' });
 
   } else {
-    // PNG – OxiPNG bezztrátová optimalizace s proměnným levelem
-    blob = await compressPng(item, imageData, opts);
-    if (blob._clipped) { clipped = true; achievedBytes = blob.size; delete blob._clipped; }
+    // PNG – UPNG quantizace (lossy) pro skutečnou redukci velikosti
+    const result = await compressPng(item, imageData, opts);
+    blob = result.blob;
+    if (result.clipped) { clipped = true; achievedBytes = blob.size; }
   }
 
   item.progressBar.style.width = '100%';
@@ -1156,7 +1151,8 @@ function canvasFallback(imageData, quality) {
   return canvasFallbackBuf(imageData, quality);
 }
 
-// PNG: canvas → blob, nikdy ne větší než originál
+// ── PNG KOMPRESE (UPNG lossy quantizace) ─────────────────────
+// PNG canvas záchranný fallback: nikdy nevrátí větší soubor než originál
 function canvasPngFallback(imageData, originalFile) {
   return new Promise(resolve => {
     const canvas = document.createElement('canvas');
@@ -1167,37 +1163,59 @@ function canvasPngFallback(imageData, originalFile) {
 }
 
 /**
- * PNG komprese přes OxiPNG (pokud dostupný) nebo canvas fallback.
- * Respektuje opts.mode === 'quality' (compressionPct → level 1–6)
- *                      === 'size'    (hledá nejmenší level ≤ targetBytes)
- * Vrací Blob; pokud nebylo dosaženo cílové velikosti, blob._clipped = true.
+ * PNG komprese přes UPNG.js s barevnou kvantizací.
+ * opts.mode === 'quality' → slider 0–100 % → cnum (počet barev palety)
+ * opts.mode === 'size'    → zkusí několik cnum, vybere nejmenší který se vejde
+ * Vrací { blob, clipped }.
  */
 async function compressPng(item, imageData, opts) {
-  if (!oxipngOptimise) return canvasPngFallback(imageData, item.file);
+  if (typeof UPNG === 'undefined') {
+    const blob = await canvasPngFallback(imageData, item.file);
+    return { blob, clipped: false };
+  }
+
+  const rgba = imageData.data.buffer;
+  const w = imageData.width, h = imageData.height;
+
+  // cnum = 0 lossless; 2–256 = lossy palette s tolika barvami
+  const encode = (cnum) => {
+    const ab = UPNG.encode([rgba], w, h, cnum);
+    return new Blob([ab], { type: 'image/png' });
+  };
 
   try {
-    const originalBytes = new Uint8Array(await item.file.arrayBuffer());
-
     if (opts.mode === 'size') {
+      // Postupně zmenšuj paletu, zastav jakmile se vejde do cíle
+      const steps = [256, 128, 64, 32, 16, 8, 4];
       let best = null;
-      for (let lvl = 1; lvl <= 6; lvl++) {
-        item.progressBar.style.width = (20 + lvl * 10) + '%';
-        const out = await oxipngOptimise(originalBytes, { level: lvl });
-        best = new Blob([out], { type: 'image/png' });
-        if (best.size <= opts.targetBytes) break;
+      for (let i = 0; i < steps.length; i++) {
+        item.progressBar.style.width = (20 + i * 11) + '%';
+        const cand = encode(steps[i]);
+        best = cand;
+        if (cand.size <= opts.targetBytes) break;
       }
-      if (best.size > opts.targetBytes) best._clipped = true;
-      return best.size < item.file.size ? best : item.file;
+      const clipped = best.size > opts.targetBytes;
+      const finalBlob = best.size < item.file.size ? best : item.file;
+      return { blob: finalBlob, clipped };
+
     } else {
-      // slider 0 % → level 1, slider 100 % → level 6
-      const level = Math.max(1, Math.min(6, Math.round(1 + (opts.compressionPct / 100) * 5)));
-      const out = await oxipngOptimise(originalBytes, { level });
-      const b = new Blob([out], { type: 'image/png' });
-      return b.size < item.file.size ? b : item.file;
+      // Quality mode: slider 0 % = lossless, 100 % = 8 barev
+      const pct = opts.compressionPct;
+      let cnum;
+      if (pct === 0) {
+        cnum = 0; // lossless
+      } else {
+        // Exponenciální mapování: 1 % → ~256 barev, 100 % → 8 barev
+        cnum = Math.max(8, Math.round(256 * Math.pow(8/256, pct/100)));
+      }
+      const b = encode(cnum);
+      const finalBlob = b.size < item.file.size ? b : item.file;
+      return { blob: finalBlob, clipped: false };
     }
   } catch (e) {
-    console.warn('OxiPNG selhalo, canvas fallback:', e);
-    return canvasPngFallback(imageData, item.file);
+    console.warn('UPNG selhalo, canvas fallback:', e);
+    const blob = await canvasPngFallback(imageData, item.file);
+    return { blob, clipped: false };
   }
 }
 
