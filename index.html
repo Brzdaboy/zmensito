@@ -797,18 +797,35 @@ function updateSuffixExt() {
 
 
 const wasmStatus = document.getElementById('wasmStatus');
-let mozjpegEncode = null;
+let mozjpegEncode  = null;
+let oxipngOptimise = null;
 
 (async () => {
+  let parts = [];
+
   try {
     const { encode } = await import('https://unpkg.com/@jsquash/jpeg@1.4.0?module');
-    await encode(new ImageData(new Uint8ClampedArray(4), 1, 1), { quality: 50 });
+    await encode(new ImageData(new Uint8ClampedArray([255,0,0,255]), 1, 1), { quality: 50 });
     mozjpegEncode = encode;
-    wasmStatus.textContent = '✓ MozJPEG WebAssembly připraven';
-    wasmStatus.style.color = 'var(--success)';
-    setTimeout(() => { wasmStatus.style.opacity = '0'; }, 2500);
+    parts.push('MozJPEG');
   } catch (e) {
     console.warn('MozJPEG nedostupný, fallback na Canvas:', e);
+  }
+
+  try {
+    const mod = await import('https://unpkg.com/@jsquash/oxipng@2.0.0?module');
+    const fn = mod.default ?? mod.optimise;
+    if (typeof fn === 'function') { oxipngOptimise = fn; parts.push('OxiPNG'); }
+    else throw new Error('OxiPNG export není funkce');
+  } catch (e) {
+    console.warn('OxiPNG nedostupný:', e);
+  }
+
+  if (parts.length) {
+    wasmStatus.textContent = `✓ WebAssembly připraven (${parts.join(' + ')})`;
+    wasmStatus.style.color = 'var(--success)';
+    setTimeout(() => { wasmStatus.style.opacity = '0'; }, 2500);
+  } else {
     wasmStatus.textContent = '⚠ Fallback: Canvas API';
     wasmStatus.style.color = 'var(--accent2)';
   }
@@ -973,39 +990,40 @@ compressBtn.addEventListener('click', async () => {
   saveZipBtn.style.display = 'none';
   sizeNote.style.display = 'none';
 
-  if (compressionMode === 'quality') {
-    // Klasický režim: pevná kvalita pro celou dávku
-    const quality = getJpegQuality();
-    const compressionPct = parseInt(qualitySlider.value); // 0–100
-    for (const item of files) {
-      await compressSingle(item, { mode: 'quality', quality, compressionPct });
-    }
-  } else {
-    // Cílová velikost: každý soubor dostane svůj target v bytes
-    const targetKB     = parseInt(sizeSlider.value);
-    const targetBytes  = targetKB * 1024;
-    let anyClipped = false;
-    let minAchievedKB = Infinity;
+  try {
+    if (compressionMode === 'quality') {
+      const quality = getJpegQuality();
+      const compressionPct = parseInt(qualitySlider.value);
+      for (const item of files) {
+        await compressSingle(item, { mode: 'quality', quality, compressionPct });
+      }
+    } else {
+      const targetKB    = parseInt(sizeSlider.value);
+      const targetBytes = targetKB * 1024;
+      let anyClipped = false;
+      let minAchievedKB = Infinity;
 
-    for (const item of files) {
-      const result = await compressSingle(item, { mode: 'size', targetBytes });
-      if (result && result.clipped) {
-        anyClipped = true;
-        minAchievedKB = Math.min(minAchievedKB, Math.ceil(result.achievedBytes / 1024));
+      for (const item of files) {
+        const result = await compressSingle(item, { mode: 'size', targetBytes });
+        if (result && result.clipped) {
+          anyClipped = true;
+          minAchievedKB = Math.min(minAchievedKB, Math.ceil(result.achievedBytes / 1024));
+        }
+      }
+
+      if (anyClipped) {
+        sizeNote.style.display = 'flex';
+        sizeNoteMin.textContent = minAchievedKB + ' KB';
       }
     }
-
-    // Zobraz varování pokud cíl nebyl dosažitelný
-    if (anyClipped) {
-      sizeNote.style.display = 'flex';
-      sizeNoteMin.textContent = minAchievedKB + ' KB';
-    }
+  } catch (err) {
+    console.error('Chyba při kompresi:', err);
+  } finally {
+    compressBtn.disabled = false;
+    compressBtn.innerHTML = '⚡ KOMPRIMOVAT VŠE';
+    if (files.some(f => f.compressedBlob)) saveZipBtn.style.display = 'inline-flex';
+    updateStats();
   }
-
-  compressBtn.disabled = false;
-  compressBtn.innerHTML = '⚡ KOMPRIMOVAT VŠE';
-  if (files.some(f => f.compressedBlob)) saveZipBtn.style.display = 'inline-flex';
-  updateStats();
 });
 
 /**
@@ -1079,41 +1097,8 @@ async function compressSingle(item, opts) {
 
   } else {
     // PNG – OxiPNG bezztrátová optimalizace s proměnným levelem
-    if (oxipngOptimise) {
-      try {
-        const originalBytes = new Uint8Array(await item.file.arrayBuffer());
-
-        if (opts.mode === 'size') {
-          // Cílová velikost: zkoušíme levely 1→6, zastavíme se jakmile se vejdeme
-          let bestBlob = null;
-          for (let lvl = 1; lvl <= 6; lvl++) {
-            item.progressBar.style.width = (20 + lvl * 10) + '%';
-            const optimized = await oxipngOptimise(originalBytes, { level: lvl });
-            const candidate = new Blob([optimized], { type: 'image/png' });
-            bestBlob = candidate;
-            if (candidate.size <= opts.targetBytes) break;
-          }
-          // Clipping – cíl nebyl dosažitelný ani na max levelu
-          if (bestBlob.size > opts.targetBytes) {
-            clipped = true;
-            achievedBytes = bestBlob.size;
-          }
-          blob = bestBlob.size < item.file.size ? bestBlob : item.file;
-
-        } else {
-          // Míra komprese: slider 0–100 % → OxiPNG level 1–6
-          const level = Math.max(1, Math.min(6, Math.round(1 + (opts.compressionPct / 100) * 5)));
-          const optimized = await oxipngOptimise(originalBytes, { level });
-          const oxiBlob = new Blob([optimized], { type: 'image/png' });
-          blob = oxiBlob.size < item.file.size ? oxiBlob : item.file;
-        }
-      } catch (e) {
-        console.warn('OxiPNG selhalo:', e);
-        blob = await canvasPngBlobOrOriginal(imageData, item.file);
-      }
-    } else {
-      blob = await canvasPngBlobOrOriginal(imageData, item.file);
-    }
+    blob = await compressPng(item, imageData, opts);
+    if (blob._clipped) { clipped = true; achievedBytes = blob.size; delete blob._clipped; }
   }
 
   item.progressBar.style.width = '100%';
@@ -1171,17 +1156,49 @@ function canvasFallback(imageData, quality) {
   return canvasFallbackBuf(imageData, quality);
 }
 
-// PNG canvas fallback – vrátí canvas blob NEBO originál, podle toho co je menší
-function canvasPngBlobOrOriginal(imageData, originalFile) {
+// PNG: canvas → blob, nikdy ne větší než originál
+function canvasPngFallback(imageData, originalFile) {
   return new Promise(resolve => {
     const canvas = document.createElement('canvas');
-    canvas.width  = imageData.width;
-    canvas.height = imageData.height;
+    canvas.width = imageData.width; canvas.height = imageData.height;
     canvas.getContext('2d').putImageData(imageData, 0, 0);
-    canvas.toBlob(canvasBlob => {
-      resolve(canvasBlob && canvasBlob.size < originalFile.size ? canvasBlob : originalFile);
-    }, 'image/png');
+    canvas.toBlob(b => resolve(b && b.size < originalFile.size ? b : originalFile), 'image/png');
   });
+}
+
+/**
+ * PNG komprese přes OxiPNG (pokud dostupný) nebo canvas fallback.
+ * Respektuje opts.mode === 'quality' (compressionPct → level 1–6)
+ *                      === 'size'    (hledá nejmenší level ≤ targetBytes)
+ * Vrací Blob; pokud nebylo dosaženo cílové velikosti, blob._clipped = true.
+ */
+async function compressPng(item, imageData, opts) {
+  if (!oxipngOptimise) return canvasPngFallback(imageData, item.file);
+
+  try {
+    const originalBytes = new Uint8Array(await item.file.arrayBuffer());
+
+    if (opts.mode === 'size') {
+      let best = null;
+      for (let lvl = 1; lvl <= 6; lvl++) {
+        item.progressBar.style.width = (20 + lvl * 10) + '%';
+        const out = await oxipngOptimise(originalBytes, { level: lvl });
+        best = new Blob([out], { type: 'image/png' });
+        if (best.size <= opts.targetBytes) break;
+      }
+      if (best.size > opts.targetBytes) best._clipped = true;
+      return best.size < item.file.size ? best : item.file;
+    } else {
+      // slider 0 % → level 1, slider 100 % → level 6
+      const level = Math.max(1, Math.min(6, Math.round(1 + (opts.compressionPct / 100) * 5)));
+      const out = await oxipngOptimise(originalBytes, { level });
+      const b = new Blob([out], { type: 'image/png' });
+      return b.size < item.file.size ? b : item.file;
+    }
+  } catch (e) {
+    console.warn('OxiPNG selhalo, canvas fallback:', e);
+    return canvasPngFallback(imageData, item.file);
+  }
 }
 
 // ── Save ZIP ──────────────────────────────────────────────────
