@@ -807,21 +807,21 @@ let oxipngOptimise = null;
   // MozJPEG
   try {
     const { encode } = await import('https://unpkg.com/@jsquash/jpeg@1.4.0?module');
-    await encode(new ImageData(new Uint8ClampedArray(4), 1, 1), { quality: 50 });
+    await encode(new ImageData(new Uint8ClampedArray([255,0,0,255]), 1, 1), { quality: 50 });
     mozjpegEncode = encode;
     jpegOk = true;
   } catch (e) {
     console.warn('MozJPEG nedostupný, fallback na Canvas:', e);
   }
 
-  // OxiPNG
+  // OxiPNG – načteme bez warm-up volání, které může selhat na WASM init
   try {
-    const oxipng = await import('https://unpkg.com/@jsquash/oxipng@2.0.0?module');
-    oxipngOptimise = oxipng.default ?? oxipng.optimise;
-    await oxipngOptimise(new ImageData(new Uint8ClampedArray(4), 1, 1), { level: 1 });
+    const mod = await import('https://unpkg.com/@jsquash/oxipng@2.0.0?module');
+    oxipngOptimise = mod.default ?? mod.optimise ?? mod;
+    if (typeof oxipngOptimise !== 'function') throw new Error('not a function');
     pngOk = true;
   } catch (e) {
-    console.warn('OxiPNG nedostupný, PNG fallback na Canvas:', e);
+    console.warn('OxiPNG nedostupný:', e);
   }
 
   if (jpegOk || pngOk) {
@@ -832,7 +832,7 @@ let oxipngOptimise = null;
     wasmStatus.style.color = 'var(--success)';
     setTimeout(() => { wasmStatus.style.opacity = '0'; }, 2500);
   } else {
-    wasmStatus.textContent = '⚠ Fallback: Canvas API';
+    wasmStatus.textContent = '⚠ Fallback: Canvas API (JPEG) / bez komprese (PNG)';
     wasmStatus.style.color = 'var(--accent2)';
   }
 })();
@@ -1100,16 +1100,25 @@ async function compressSingle(item, opts) {
     blob = new Blob([buffer], { type: 'image/jpeg' });
 
   } else {
-    // PNG – bezztrátová optimalizace pomocí OxiPNG WASM
+    // PNG – OxiPNG bezztrátová optimalizace
+    // Předáváme přímo bajty originálního souboru (zachová 8-bit/paletu, vyhne se RGBA upconverzi)
     if (oxipngOptimise) {
       try {
-        const optimized = await oxipngOptimise(imageData, { level: 2 });
+        const originalBytes = new Uint8Array(await item.file.arrayBuffer());
+        const optimized = await oxipngOptimise(originalBytes, { level: 2 });
         const oxiBlob = new Blob([optimized], { type: 'image/png' });
-        // Použij OxiPNG výstup pouze pokud je menší než originál
         blob = oxiBlob.size < item.file.size ? oxiBlob : item.file;
       } catch (e) {
-        console.warn('OxiPNG selhalo, fallback:', e);
-        blob = await canvasPngBlobOrOriginal(imageData, item.file);
+        // Fallback: zkus s ImageData (starší API)
+        console.warn('OxiPNG bytes API selhalo, zkouším ImageData:', e);
+        try {
+          const optimized = await oxipngOptimise(imageData, { level: 2 });
+          const oxiBlob = new Blob([optimized], { type: 'image/png' });
+          blob = oxiBlob.size < item.file.size ? oxiBlob : item.file;
+        } catch (e2) {
+          console.warn('OxiPNG ImageData API selhalo:', e2);
+          blob = await canvasPngBlobOrOriginal(imageData, item.file);
+        }
       }
     } else {
       blob = await canvasPngBlobOrOriginal(imageData, item.file);
@@ -1172,7 +1181,6 @@ function canvasFallback(imageData, quality) {
 }
 
 // PNG canvas fallback – vrátí canvas blob NEBO originál, podle toho co je menší
-// (canvas vždy produkuje 32-bit RGBA PNG, které může být větší než 8-bit originál)
 function canvasPngBlobOrOriginal(imageData, originalFile) {
   return new Promise(resolve => {
     const canvas = document.createElement('canvas');
