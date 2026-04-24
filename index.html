@@ -639,6 +639,10 @@
     ⏳ Načítám MozJPEG WebAssembly...
   </div>
 
+  <div id="pngInfo" style="display:none;text-align:center;margin-top:8px;font-size:0.78rem;color:var(--muted);padding:10px 16px;background:var(--surface);border:1px solid var(--border);border-radius:8px;line-height:1.5;">
+    ℹ <strong style="color:var(--text)">0 % = bezztrátová</strong> (max. -15 %) · <strong style="color:var(--text)">nad 0 %</strong> = mírná ztráta kvality pro výrazně menší soubor (redukce barevné palety s ditheringem)
+  </div>
+
   <div class="toolbar" id="toolbar" style="display:none">
     <div class="toolbar-left">
       <button class="btn btn-primary" id="compressBtn">⚡ KOMPRIMOVAT VŠE</button>
@@ -799,7 +803,9 @@ function updateSuffixExt() {
 
 
 const wasmStatus = document.getElementById('wasmStatus');
-let mozjpegEncode = null;
+const pngInfo    = document.getElementById('pngInfo');
+let mozjpegEncode  = null;
+let oxipngOptimise = null;
 
 (async () => {
   let parts = [];
@@ -810,7 +816,18 @@ let mozjpegEncode = null;
     mozjpegEncode = encode;
     parts.push('MozJPEG');
   } catch (e) {
-    console.warn('MozJPEG nedostupný, fallback na Canvas:', e);
+    console.warn('MozJPEG nedostupný:', e);
+  }
+
+  try {
+    const mod = await import('https://esm.sh/@jsquash/oxipng@2.2.0');
+    const fn = mod.default ?? mod.optimise;
+    if (typeof fn === 'function') {
+      oxipngOptimise = fn;
+      parts.push('OxiPNG');
+    }
+  } catch (e) {
+    console.warn('OxiPNG nedostupný:', e);
   }
 
   if (typeof UPNG !== 'undefined') parts.push('UPNG');
@@ -853,10 +870,12 @@ function setMode(m) {
     fileInput.accept = 'image/jpeg,image/jpg';
     dropTitle.textContent = 'Přetáhni JPEG soubory sem';
     heroH1.innerHTML = 'Zmenši JPEG soubory<br><em>bez viditelné ztráty kvality</em>';
+    pngInfo.style.display = 'none';
   } else {
     fileInput.accept = 'image/png';
     dropTitle.textContent = 'Přetáhni PNG soubory sem';
     heroH1.innerHTML = 'Zmenši PNG soubory<br><em>bez viditelné ztráty kvality</em>';
+    pngInfo.style.display = 'block';
   }
   files = [];
   imagesGrid.innerHTML = '';
@@ -1090,10 +1109,10 @@ async function compressSingle(item, opts) {
     blob = new Blob([buffer], { type: 'image/jpeg' });
 
   } else {
-    // PNG – UPNG quantizace (lossy) pro skutečnou redukci velikosti
-    const result = await compressPng(item, imageData, opts);
-    blob = result.blob;
-    if (result.clipped) { clipped = true; achievedBytes = blob.size; }
+    // PNG – hybridní: 0 % = bezztrátová OxiPNG, >0 % = lossy UPNG s ditheringem
+    const r = await compressPng(item, imageData, opts);
+    blob = r.blob;
+    if (r.clipped) { clipped = true; achievedBytes = blob.size; }
   }
 
   item.progressBar.style.width = '100%';
@@ -1151,8 +1170,8 @@ function canvasFallback(imageData, quality) {
   return canvasFallbackBuf(imageData, quality);
 }
 
-// ── PNG KOMPRESE (UPNG lossy quantizace) ─────────────────────
-// PNG canvas záchranný fallback: nikdy nevrátí větší soubor než originál
+// ── PNG: hybridní komprese ────────────────────────────────────
+// Canvas záchranný fallback – nikdy nevrátí větší soubor než originál
 function canvasPngFallback(imageData, originalFile) {
   return new Promise(resolve => {
     const canvas = document.createElement('canvas');
@@ -1162,61 +1181,91 @@ function canvasPngFallback(imageData, originalFile) {
   });
 }
 
+// Bezztrátová OxiPNG komprese – vrací Blob
+async function pngLossless(item) {
+  if (!oxipngOptimise) return null;
+  try {
+    const bytes = new Uint8Array(await item.file.arrayBuffer());
+    const out = await oxipngOptimise(bytes, { level: 2, interlace: false });
+    return new Blob([out], { type: 'image/png' });
+  } catch (e) {
+    console.warn('OxiPNG selhalo:', e);
+    return null;
+  }
+}
+
+// Lossy UPNG komprese s Floyd-Steinberg ditheringem
+// cnum = počet barev palety (2-256); lineární mapování: pct=1 → 256, pct=100 → 64
+function pngLossy(imageData, cnum) {
+  if (typeof UPNG === 'undefined') return null;
+  try {
+    const ab = UPNG.encode([imageData.data.buffer], imageData.width, imageData.height, cnum);
+    return new Blob([ab], { type: 'image/png' });
+  } catch (e) {
+    console.warn('UPNG selhalo:', e);
+    return null;
+  }
+}
+
+// Slider 1–100 % → počet barev 256–64 (lineární, konzervativní mapování)
+function pctToColors(pct) {
+  // pct=1 → 254, pct=25 → 208, pct=50 → 160, pct=75 → 112, pct=100 → 64
+  return Math.max(64, Math.round(256 - (pct / 100) * 192));
+}
+
 /**
- * PNG komprese přes UPNG.js s barevnou kvantizací.
- * opts.mode === 'quality' → slider 0–100 % → cnum (počet barev palety)
- * opts.mode === 'size'    → zkusí několik cnum, vybere nejmenší který se vejde
+ * PNG komprese:
+ *  - opts.mode='quality', pct=0  → bezztrátová OxiPNG
+ *  - opts.mode='quality', pct>0  → lossy UPNG (256 barev při pct=1, 64 při pct=100)
+ *  - opts.mode='size'            → zkusí lossless, pak progresivně lossy
  * Vrací { blob, clipped }.
  */
 async function compressPng(item, imageData, opts) {
-  if (typeof UPNG === 'undefined') {
-    const blob = await canvasPngFallback(imageData, item.file);
-    return { blob, clipped: false };
-  }
+  const pickSmaller = (b) => (b && b.size < item.file.size) ? b : item.file;
 
-  const rgba = imageData.data.buffer;
-  const w = imageData.width, h = imageData.height;
+  // Size mode: pokus o target velikost
+  if (opts.mode === 'size') {
+    item.progressBar.style.width = '25%';
 
-  // cnum = 0 lossless; 2–256 = lossy palette s tolika barvami
-  const encode = (cnum) => {
-    const ab = UPNG.encode([rgba], w, h, cnum);
-    return new Blob([ab], { type: 'image/png' });
-  };
-
-  try {
-    if (opts.mode === 'size') {
-      // Postupně zmenšuj paletu, zastav jakmile se vejde do cíle
-      const steps = [256, 128, 64, 32, 16, 8, 4];
-      let best = null;
-      for (let i = 0; i < steps.length; i++) {
-        item.progressBar.style.width = (20 + i * 11) + '%';
-        const cand = encode(steps[i]);
-        best = cand;
-        if (cand.size <= opts.targetBytes) break;
-      }
-      const clipped = best.size > opts.targetBytes;
-      const finalBlob = best.size < item.file.size ? best : item.file;
-      return { blob: finalBlob, clipped };
-
-    } else {
-      // Quality mode: slider 0 % = lossless, 100 % = 8 barev
-      const pct = opts.compressionPct;
-      let cnum;
-      if (pct === 0) {
-        cnum = 0; // lossless
-      } else {
-        // Exponenciální mapování: 1 % → ~256 barev, 100 % → 8 barev
-        cnum = Math.max(8, Math.round(256 * Math.pow(8/256, pct/100)));
-      }
-      const b = encode(cnum);
-      const finalBlob = b.size < item.file.size ? b : item.file;
-      return { blob: finalBlob, clipped: false };
+    // 1) Zkus bezztrátový OxiPNG – jestli se vejde, skvělé
+    const lossless = await pngLossless(item);
+    if (lossless && lossless.size <= opts.targetBytes) {
+      return { blob: pickSmaller(lossless), clipped: false };
     }
-  } catch (e) {
-    console.warn('UPNG selhalo, canvas fallback:', e);
-    const blob = await canvasPngFallback(imageData, item.file);
-    return { blob, clipped: false };
+
+    // 2) Progresivně lossy UPNG: 256 → 128 → 64 → 32 → 16 barev
+    const palette = [256, 192, 128, 96, 64, 48, 32, 24, 16];
+    let best = lossless; // máme už něco, pokud to OxiPNG zvládl
+    for (let i = 0; i < palette.length; i++) {
+      item.progressBar.style.width = (30 + i * 8) + '%';
+      const cand = pngLossy(imageData, palette[i]);
+      if (!cand) continue;
+      best = cand;
+      if (cand.size <= opts.targetBytes) break;
+    }
+    if (!best) return { blob: await canvasPngFallback(imageData, item.file), clipped: false };
+    const clipped = best.size > opts.targetBytes;
+    return { blob: pickSmaller(best), clipped };
   }
+
+  // Quality mode
+  const pct = opts.compressionPct;
+
+  // pct=0 → bezztrátová
+  if (pct === 0) {
+    item.progressBar.style.width = '50%';
+    const b = await pngLossless(item);
+    if (b) return { blob: pickSmaller(b), clipped: false };
+    // fallback pokud OxiPNG selhal
+    return { blob: await canvasPngFallback(imageData, item.file), clipped: false };
+  }
+
+  // pct>0 → lossy s konzervativním počtem barev
+  item.progressBar.style.width = '50%';
+  const cnum = pctToColors(pct);
+  const b = pngLossy(imageData, cnum);
+  if (b) return { blob: pickSmaller(b), clipped: false };
+  return { blob: await canvasPngFallback(imageData, item.file), clipped: false };
 }
 
 // ── Save ZIP ──────────────────────────────────────────────────
