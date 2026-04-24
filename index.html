@@ -797,42 +797,19 @@ function updateSuffixExt() {
 
 
 const wasmStatus = document.getElementById('wasmStatus');
-let mozjpegEncode  = null;
-let oxipngOptimise = null;
+let mozjpegEncode = null;
 
 (async () => {
-  let jpegOk = false;
-  let pngOk  = false;
-
-  // MozJPEG
   try {
     const { encode } = await import('https://unpkg.com/@jsquash/jpeg@1.4.0?module');
-    await encode(new ImageData(new Uint8ClampedArray([255,0,0,255]), 1, 1), { quality: 50 });
+    await encode(new ImageData(new Uint8ClampedArray(4), 1, 1), { quality: 50 });
     mozjpegEncode = encode;
-    jpegOk = true;
-  } catch (e) {
-    console.warn('MozJPEG nedostupný, fallback na Canvas:', e);
-  }
-
-  // OxiPNG – načteme bez warm-up volání, které může selhat na WASM init
-  try {
-    const mod = await import('https://unpkg.com/@jsquash/oxipng@2.0.0?module');
-    oxipngOptimise = mod.default ?? mod.optimise ?? mod;
-    if (typeof oxipngOptimise !== 'function') throw new Error('not a function');
-    pngOk = true;
-  } catch (e) {
-    console.warn('OxiPNG nedostupný:', e);
-  }
-
-  if (jpegOk || pngOk) {
-    const parts = [];
-    if (jpegOk) parts.push('MozJPEG');
-    if (pngOk)  parts.push('OxiPNG');
-    wasmStatus.textContent = `✓ WebAssembly připraven (${parts.join(' + ')})`;
+    wasmStatus.textContent = '✓ MozJPEG WebAssembly připraven';
     wasmStatus.style.color = 'var(--success)';
     setTimeout(() => { wasmStatus.style.opacity = '0'; }, 2500);
-  } else {
-    wasmStatus.textContent = '⚠ Fallback: Canvas API (JPEG) / bez komprese (PNG)';
+  } catch (e) {
+    console.warn('MozJPEG nedostupný, fallback na Canvas:', e);
+    wasmStatus.textContent = '⚠ Fallback: Canvas API';
     wasmStatus.style.color = 'var(--accent2)';
   }
 })();
@@ -999,8 +976,9 @@ compressBtn.addEventListener('click', async () => {
   if (compressionMode === 'quality') {
     // Klasický režim: pevná kvalita pro celou dávku
     const quality = getJpegQuality();
+    const compressionPct = parseInt(qualitySlider.value); // 0–100
     for (const item of files) {
-      await compressSingle(item, { mode: 'quality', quality });
+      await compressSingle(item, { mode: 'quality', quality, compressionPct });
     }
   } else {
     // Cílová velikost: každý soubor dostane svůj target v bytes
@@ -1100,25 +1078,38 @@ async function compressSingle(item, opts) {
     blob = new Blob([buffer], { type: 'image/jpeg' });
 
   } else {
-    // PNG – OxiPNG bezztrátová optimalizace
-    // Předáváme přímo bajty originálního souboru (zachová 8-bit/paletu, vyhne se RGBA upconverzi)
+    // PNG – OxiPNG bezztrátová optimalizace s proměnným levelem
     if (oxipngOptimise) {
       try {
         const originalBytes = new Uint8Array(await item.file.arrayBuffer());
-        const optimized = await oxipngOptimise(originalBytes, { level: 2 });
-        const oxiBlob = new Blob([optimized], { type: 'image/png' });
-        blob = oxiBlob.size < item.file.size ? oxiBlob : item.file;
-      } catch (e) {
-        // Fallback: zkus s ImageData (starší API)
-        console.warn('OxiPNG bytes API selhalo, zkouším ImageData:', e);
-        try {
-          const optimized = await oxipngOptimise(imageData, { level: 2 });
+
+        if (opts.mode === 'size') {
+          // Cílová velikost: zkoušíme levely 1→6, zastavíme se jakmile se vejdeme
+          let bestBlob = null;
+          for (let lvl = 1; lvl <= 6; lvl++) {
+            item.progressBar.style.width = (20 + lvl * 10) + '%';
+            const optimized = await oxipngOptimise(originalBytes, { level: lvl });
+            const candidate = new Blob([optimized], { type: 'image/png' });
+            bestBlob = candidate;
+            if (candidate.size <= opts.targetBytes) break;
+          }
+          // Clipping – cíl nebyl dosažitelný ani na max levelu
+          if (bestBlob.size > opts.targetBytes) {
+            clipped = true;
+            achievedBytes = bestBlob.size;
+          }
+          blob = bestBlob.size < item.file.size ? bestBlob : item.file;
+
+        } else {
+          // Míra komprese: slider 0–100 % → OxiPNG level 1–6
+          const level = Math.max(1, Math.min(6, Math.round(1 + (opts.compressionPct / 100) * 5)));
+          const optimized = await oxipngOptimise(originalBytes, { level });
           const oxiBlob = new Blob([optimized], { type: 'image/png' });
           blob = oxiBlob.size < item.file.size ? oxiBlob : item.file;
-        } catch (e2) {
-          console.warn('OxiPNG ImageData API selhalo:', e2);
-          blob = await canvasPngBlobOrOriginal(imageData, item.file);
         }
+      } catch (e) {
+        console.warn('OxiPNG selhalo:', e);
+        blob = await canvasPngBlobOrOriginal(imageData, item.file);
       }
     } else {
       blob = await canvasPngBlobOrOriginal(imageData, item.file);
